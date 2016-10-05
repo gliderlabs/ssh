@@ -3,8 +3,6 @@ package ssh
 import (
 	"crypto/subtle"
 	"net"
-
-	gossh "golang.org/x/crypto/ssh"
 )
 
 type Signal string
@@ -72,7 +70,7 @@ func Handle(handler Handler) {
 
 // KeysEqual is constant time compare of the keys to avoid timing attacks
 func KeysEqual(ak, bk PublicKey) bool {
-	a := gossh.Marshal(ak)
-	b := gossh.Marshal(bk)
+	a := ak.Marshal()
+	b := bk.Marshal()
 	return (len(a) == len(b) && subtle.ConstantTimeCompare(a, b) == 1)
 }
