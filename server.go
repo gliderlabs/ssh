@@ -8,14 +8,18 @@ import (
 	gossh "golang.org/x/crypto/ssh"
 )
 
+// Server defines parameters for running an SSH server. The zero value for
+// Server is a valid configuration. When both PasswordHandler and
+// PublicKeyHandler are nil, no client authentication is performed.
 type Server struct {
-	Addr                string
-	Handler             Handler
-	HostSigners         []Signer
-	PasswordHandler     PasswordHandler
-	PublicKeyHandler    PublicKeyHandler
-	PermissionsCallback PermissionsCallback
-	PtyCallback         PtyCallback
+	Addr        string   // TCP address to listen on, ":22" if empty
+	Handler     Handler  // handler to invoke, ssh.DefaultHandler if nil
+	HostSigners []Signer // private keys for the host key, must have at least one
+
+	PasswordHandler     PasswordHandler     // password authentication handler
+	PublicKeyHandler    PublicKeyHandler    // public key authentication handler
+	PtyCallback         PtyCallback         // callback for allowing PTY sessions, allows all if nil
+	PermissionsCallback PermissionsCallback // optional callback for setting up permissions
 }
 
 func (srv *Server) makeConfig() (*gossh.ServerConfig, error) {
@@ -63,10 +67,16 @@ func (srv *Server) makeConfig() (*gossh.ServerConfig, error) {
 	return config, nil
 }
 
+// Handle sets the Handler for the server.
 func (srv *Server) Handle(fn Handler) {
 	srv.Handler = fn
 }
 
+// Serve accepts incoming connections on the Listener l, creating a new
+// connection goroutine for each. The connection goroutines read requests and then
+// calls srv.Handler to handle sessions.
+//
+// Serve always returns a non-nil error.
 func (srv *Server) Serve(l net.Listener) error {
 	defer l.Close()
 	config, err := srv.makeConfig()
@@ -74,7 +84,7 @@ func (srv *Server) Serve(l net.Listener) error {
 		return err
 	}
 	if srv.Handler == nil {
-		srv.Handler = defaultHandler
+		srv.Handler = DefaultHandler
 	}
 	var tempDelay time.Duration
 	for {
@@ -89,7 +99,6 @@ func (srv *Server) Serve(l net.Listener) error {
 				if max := 1 * time.Second; tempDelay > max {
 					tempDelay = max
 				}
-				//srv.logf("http: Accept error: %v; retrying in %v", e, tempDelay)
 				time.Sleep(tempDelay)
 				continue
 			}
@@ -134,6 +143,9 @@ func (srv *Server) newSession(conn *gossh.ServerConn, ch gossh.Channel) *session
 	return sess
 }
 
+// ListenAndServe listens on the TCP network address srv.Addr and then calls
+// Serve to handle incoming connections. If srv.Addr is blank, ":22" is used.
+// ListenAndServe always returns a non-nil error.
 func (srv *Server) ListenAndServe() error {
 	addr := srv.Addr
 	if addr == "" {
@@ -146,6 +158,16 @@ func (srv *Server) ListenAndServe() error {
 	return srv.Serve(ln)
 }
 
+// AddHostKey adds a private key as a host key. If an existing host key exists
+// with the same algorithm, it is overwritten. Each server config must have at
+// least one host key.
+func (srv *Server) AddHostKey(key Signer) {
+	// these are later added via AddHostKey on ServerConfig, which performs the
+	// check for one of every algorithm.
+	srv.HostSigners = append(srv.HostSigners, signer)
+}
+
+// SetOption runs a functional option against the server.
 func (srv *Server) SetOption(option Option) error {
 	return option(srv)
 }

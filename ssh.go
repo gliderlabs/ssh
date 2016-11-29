@@ -24,26 +24,42 @@ const (
 	SIGUSR2 Signal = "USR2"
 )
 
-var defaultHandler Handler
+// DefaultHandler is the default Handler used by Serve.
+var DefaultHandler Handler
 
+// Option is a functional option handler for Server.
 type Option func(*Server) error
+
+// Handler is a callback for handling established SSH sessions.
 type Handler func(Session)
 
+// PublicKeyHandler is a callback for performing public key authentication.
 type PublicKeyHandler func(user string, key PublicKey) bool
+
+// PasswordHandler is a callback for performing password authentication.
 type PasswordHandler func(user, password string) bool
 
+// PermissionsCallback is a hook for setting up user permissions.
 type PermissionsCallback func(user string, permissions *Permissions) error
+
+// PtyCallback is a hook for allowing PTY sessions.
 type PtyCallback func(user string, permissions *Permissions) bool
 
+// Window represents the size of a PTY window.
 type Window struct {
 	Width  int
 	Height int
 }
 
+// Pty represents PTY configuration.
 type Pty struct {
 	Window Window
 }
 
+// Serve accepts incoming SSH connections on the listener l, creating a new
+// connection goroutine for each. The connection goroutines read requests and
+// then calls handler to handle sessions. Handler is typically nil, in which
+// case the DefaultHandler is used.
 func Serve(l net.Listener, handler Handler, options ...Option) error {
 	srv := &Server{Handler: handler}
 	for _, option := range options {
@@ -54,6 +70,9 @@ func Serve(l net.Listener, handler Handler, options ...Option) error {
 	return srv.Serve(l)
 }
 
+// ListenAndServe listens on the TCP network address addr and then calls Serve
+// with handler to handle sessions on incoming connections. Handler is typically
+// nil, in which case the DefaultHandler is used.
 func ListenAndServe(addr string, handler Handler, options ...Option) error {
 	srv := &Server{Addr: addr, Handler: handler}
 	for _, option := range options {
@@ -64,11 +83,12 @@ func ListenAndServe(addr string, handler Handler, options ...Option) error {
 	return srv.ListenAndServe()
 }
 
+// Handle registers the handler as the DefaultHandler.
 func Handle(handler Handler) {
-	defaultHandler = handler
+	DefaultHandler = handler
 }
 
-// KeysEqual is constant time compare of the keys to avoid timing attacks
+// KeysEqual is constant time compare of the keys to avoid timing attacks.
 func KeysEqual(ak, bk PublicKey) bool {
 	a := ak.Marshal()
 	b := bk.Marshal()

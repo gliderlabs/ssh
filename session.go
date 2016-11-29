@@ -9,16 +9,44 @@ import (
 	gossh "golang.org/x/crypto/ssh"
 )
 
+// Session provides access to information about an SSH session and methods
+// to read and write to the SSH channel with an embedded Channel interface from
+// cypto/ssh.
+//
+// When Command() returns an empty slice, the user requested a shell. Otherwise
+// the user is performing an exec with those command arguments.
+//
+// TODO: Signals
 type Session interface {
 	gossh.Channel
+
+	// User returns the username used when establishing the SSH connection.
 	User() string
+
+	// RemoteAddr returns the net.Addr of the client side of the connection.
 	RemoteAddr() net.Addr
+
+	// Environ returns a copy of strings representing the environment set by the
+	// user for this session, in the form "key=value".
 	Environ() []string
+
+	// Exit sends an exit status and then closes the session.
 	Exit(code int) error
+
+	// Command returns a shell parsed slice of arguments that were provided by the
+	// user. Shell parsing splits the command string according to POSIX shell rules,
+	// which considers quoting not just whitespace.
 	Command() []string
-	//Signals(c chan<- Signal)
+
+	// PublicKey returns the PublicKey used to authenticate. If a public key was not
+	// used it will return nil.
 	PublicKey() PublicKey
+
+	// Pty returns PTY information, a channel of window size changes, and a boolean
+	// of whether or not a PTY was created for this session.
 	Pty() (Pty, <-chan Window, bool)
+
+	// TODO: Signals(c chan<- Signal)
 }
 
 type session struct {
