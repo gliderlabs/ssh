@@ -12,7 +12,7 @@ ListenAndServe starts an SSH server with a given address, handler, and options. 
 handler is usually nil, which means to use DefaultHandler. Handle sets DefaultHandler:
 
   ssh.Handle(func(s ssh.Session) {
-    io.WriteString(s, "Hello world\n")
+      io.WriteString(s, "Hello world\n")
   })
 
   log.Fatal(ssh.ListenAndServe(":2222", nil))
@@ -27,13 +27,21 @@ Although all options have functional option helpers, another way to control the
 server's behavior is by creating a custom Server:
 
   s := &ssh.Server{
-    Addr:             ":2222",
-    Handler:          sessionHandler,
-    PublicKeyHandler: authHandler,
+      Addr:             ":2222",
+      Handler:          sessionHandler,
+      PublicKeyHandler: authHandler,
   }
   s.AddHostKey(hostKeySigner)
 
   log.Fatal(s.ListenAndServe())
+
+This package automatically handles basic SSH requests like setting environment
+variables, requesting PTY, and changing window size. These requests are
+processed, responded to, and any relevant state is updated. This state is then
+exposed to you via the Session interface.
+
+The one big feature missing from the Session abstraction is signals. This was
+started, but not completed. Pull Requests welcome!
 
 */
 package ssh

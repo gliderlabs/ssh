@@ -43,7 +43,7 @@ type Session interface {
 	PublicKey() PublicKey
 
 	// Pty returns PTY information, a channel of window size changes, and a boolean
-	// of whether or not a PTY was created for this session.
+	// of whether or not a PTY was accepted for this session.
 	Pty() (Pty, <-chan Window, bool)
 
 	// TODO: Signals(c chan<- Signal)
