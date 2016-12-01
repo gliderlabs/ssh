@@ -164,7 +164,7 @@ func (srv *Server) ListenAndServe() error {
 func (srv *Server) AddHostKey(key Signer) {
 	// these are later added via AddHostKey on ServerConfig, which performs the
 	// check for one of every algorithm.
-	srv.HostSigners = append(srv.HostSigners, signer)
+	srv.HostSigners = append(srv.HostSigners, key)
 }
 
 // SetOption runs a functional option against the server.
