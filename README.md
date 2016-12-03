@@ -8,20 +8,21 @@ building SSH servers. The goal of the API was to make it as simple as using
 [net/http](https://golang.org/pkg/net/http/), so the API is very similar:
 
 ```
-package main
-
-import (
-    "io"
-    "github.com/gliderlabs/ssh"
-)
-
-func main() {
-    ssh.Handle(func(s ssh.Session) {
-        io.WriteString(s, "Hello world\n")
-    })
-
-    log.Fatal(ssh.ListenAndServe(":2222", nil))
-}
+ package main
+ 
+ import (
+     "github.com/gliderlabs/ssh"
+     "io"
+     "log"
+ )
+ 
+ func main() {
+     ssh.Handle(func(s ssh.Session) {
+         io.WriteString(s, "Hello world\n")
+     })  
+ 
+     log.Fatal(ssh.ListenAndServe(":2222", nil))
+ }
 
 ```
 
