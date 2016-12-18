@@ -90,6 +90,12 @@ func Handle(handler Handler) {
 
 // KeysEqual is constant time compare of the keys to avoid timing attacks.
 func KeysEqual(ak, bk PublicKey) bool {
+
+	//avoid panic if one of the keys is nil, return false instead
+	if ak == nil || bk == nil {
+		return false
+	}
+
 	a := ak.Marshal()
 	b := bk.Marshal()
 	return (len(a) == len(b) && subtle.ConstantTimeCompare(a, b) == 1)
