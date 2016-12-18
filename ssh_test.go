@@ -2,8 +2,6 @@ package ssh
 
 import (
 	"testing"
-
-	"github.com/gliderlabs/ssh"
 )
 
 func TestKeysEqual(t *testing.T) {
@@ -13,7 +11,7 @@ func TestKeysEqual(t *testing.T) {
 		}
 	}()
 
-	if ssh.KeysEqual(nil, nil) {
+	if KeysEqual(nil, nil) {
 		t.Error("two nil keys should not return true")
 	}
 }
