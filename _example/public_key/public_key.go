@@ -6,7 +6,7 @@ import (
 
 	b64 "encoding/base64"
 
-	"github.com/hloeffler/ssh"
+	"github.com/gliderlabs/ssh"
 )
 
 func main() {

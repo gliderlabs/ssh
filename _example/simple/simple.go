@@ -4,7 +4,7 @@ import (
 	"io"
 	"log"
 
-	"github.com/hloeffler/ssh"
+	"github.com/gliderlabs/ssh"
 )
 
 func main() {
