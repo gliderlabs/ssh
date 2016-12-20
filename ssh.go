@@ -5,6 +5,7 @@ import (
 	"net"
 )
 
+// Signal as in RFC 4254 Section 6.10.
 type Signal string
 
 // POSIX signals as listed in RFC 4254 Section 6.10.
