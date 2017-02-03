@@ -127,6 +127,9 @@ func (sess *session) handleRequests(reqs <-chan *gossh.Request) {
 				req.Reply(false, nil)
 				continue
 			}
+			sess.handled = true
+			req.Reply(true, nil)
+
 			var payload = struct{ Value string }{}
 			gossh.Unmarshal(req.Payload, &payload)
 			sess.cmd, _ = shlex.Split(payload.Value, true)
@@ -134,8 +137,6 @@ func (sess *session) handleRequests(reqs <-chan *gossh.Request) {
 				sess.handler(sess)
 				sess.Exit(0)
 			}()
-			sess.handled = true
-			req.Reply(true, nil)
 		case "env":
 			if sess.handled {
 				req.Reply(false, nil)
