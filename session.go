@@ -160,8 +160,9 @@ func (sess *session) handleRequests(reqs <-chan *gossh.Request) {
 			if ok {
 				sess.pty = &Pty{Window{width, height}}
 				sess.winch = make(chan Window)
-				req.Reply(true, nil)
 			}
+
+			req.Reply(ok, nil)
 		case "window-change":
 			if sess.pty == nil {
 				req.Reply(false, nil)
