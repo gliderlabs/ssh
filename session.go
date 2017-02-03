@@ -2,6 +2,7 @@ package ssh
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"net"
 
@@ -54,6 +55,7 @@ type session struct {
 	conn    *gossh.ServerConn
 	handler Handler
 	handled bool
+	exited  bool
 	pty     *Pty
 	winch   chan Window
 	env     []string
@@ -86,6 +88,11 @@ func (sess *session) PublicKey() PublicKey {
 }
 
 func (sess *session) Exit(code int) error {
+	if sess.exited {
+		return errors.New("Session.Exit called multiple times")
+	}
+	sess.exited = true
+
 	status := struct{ Status uint32 }{uint32(code)}
 	_, err := sess.SendRequest("exit-status", false, gossh.Marshal(&status))
 	if err != nil {
