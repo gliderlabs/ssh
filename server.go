@@ -15,6 +15,7 @@ type Server struct {
 	Addr        string   // TCP address to listen on, ":22" if empty
 	Handler     Handler  // handler to invoke, ssh.DefaultHandler if nil
 	HostSigners []Signer // private keys for the host key, must have at least one
+	Version     string   // server version to be sent before the initial handshake
 
 	PasswordHandler     PasswordHandler     // password authentication handler
 	PublicKeyHandler    PublicKeyHandler    // public key authentication handler
@@ -36,6 +37,9 @@ func (srv *Server) makeConfig() (*gossh.ServerConfig, error) {
 	}
 	if srv.PasswordHandler == nil && srv.PublicKeyHandler == nil {
 		config.NoClientAuth = true
+	}
+	if srv.Version != "" {
+		config.ServerVersion = "SSH-2.0-" + srv.Version
 	}
 	if srv.PasswordHandler != nil {
 		config.PasswordCallback = func(conn gossh.ConnMetadata, password []byte) (*gossh.Permissions, error) {
