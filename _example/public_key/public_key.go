@@ -17,17 +17,17 @@ func main() {
 
 		publicKeyString := keyType + " " + b64.StdEncoding.EncodeToString(s.PublicKey().Marshal())
 
-		io.WriteString(s, "Hello "+user+"\n")
-		io.WriteString(s, "your publicKey:\n")
-		io.WriteString(s, publicKeyString+"\n")
+		io.WriteString(s, "Hello "+user+"\n\n")
+		io.WriteString(s, "your public key:\n")
+		io.WriteString(s, publicKeyString+"\n\n")
 	})
 
 	publicKeyHandler := ssh.PublicKeyAuth(func(user string, key ssh.PublicKey) bool {
-		//allow all
+		// allow all keys
 		// use ssh.KeysEqual() to compare agains know keys
 		return true
 	})
 
+	log.Println("starting ssh server on port: 2222")
 	log.Fatal(ssh.ListenAndServe(":2222", nil, publicKeyHandler))
-
 }
