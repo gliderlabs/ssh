@@ -112,7 +112,8 @@ func (srv *Server) Handle(fn Handler) error {
 
 // Serve accepts incoming connections on the Listener l, creating a new
 // connection goroutine for each. The connection goroutines read requests and then
-// calls srv.Handler to handle sessions. Note that this connection will wait
+// calls srv.Handler to handle sessions. Note that this method will wait for all
+// the connections to exit before returning.
 //
 // Serve always returns a non-nil error.
 func (srv *Server) Serve(l net.Listener) error {
