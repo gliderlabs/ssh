@@ -15,11 +15,6 @@ var (
 	// something but the server is either already running and shouldn't be or
 	// vice versa.
 	ErrInvalidState = errors.New("Invalid server state")
-
-	// ErrDraining is returned from Serve in some cases when cleanly shutting
-	// down. Note that this will not always be returned if the server was asked
-	// to shut down.
-	ErrDraining = errors.New("Server was asked to shut down")
 )
 
 type serverState int
@@ -47,7 +42,6 @@ type Server struct {
 	// Internal fields. Note that the zero value for these should be a state we
 	// can detect so the Server can still be instantiated using &Server{}.
 	stateLock sync.Mutex
-	stateChan chan struct{}
 	state     serverState
 	listener  net.Listener
 }
@@ -131,7 +125,6 @@ func (srv *Server) Serve(l net.Listener) error {
 		return ErrInvalidState
 	}
 	srv.state = stateStarted
-	srv.stateChan = make(chan struct{}, 1)
 	srv.listener = l
 	srv.stateLock.Unlock()
 
@@ -142,7 +135,6 @@ func (srv *Server) Serve(l net.Listener) error {
 		defer srv.stateLock.Unlock()
 
 		srv.state = stateStopped
-		srv.stateChan = nil
 
 		// If there's still a listener around, we need to close it
 		if srv.listener != nil {
@@ -187,13 +179,6 @@ func (srv *Server) Serve(l net.Listener) error {
 			defer wg.Done()
 			srv.handleConn(conn, config)
 		}()
-
-		// If there was a message left for us on the stateChan, we're draining
-		// and can safely return.
-		_, ok := <-srv.stateChan
-		if ok {
-			return ErrDraining
-		}
 	}
 }
 
@@ -213,7 +198,6 @@ func (srv *Server) Drain() error {
 	srv.state = stateDraining
 	srv.listener.Close()
 	srv.listener = nil
-	srv.stateChan <- struct{}{}
 
 	return nil
 }
