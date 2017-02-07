@@ -24,6 +24,9 @@ var (
 
 type serverState int
 
+// TODO: More states, in particular around how Close and Shutdown will interact
+// TODO: Ensure we properly handle closing killChan, specifically when using
+// Shutdown.
 const (
 	stateStopped serverState = iota
 	stateStarted
@@ -46,15 +49,16 @@ type Server struct {
 
 	// Internal fields. Note that the zero value for these should be a state we
 	// can detect so the Server can still be instantiated using &Server{}.
-	listener net.Listener
 
-	mu       sync.Mutex
-	wg       *sync.WaitGroup
-	state    serverState
-	doneChan chan struct{}
-	killChan chan struct{}
+	listener net.Listener    // listener currently being used by Serve, nil otherwise
+	mu       sync.Mutex      // general lock around the Server state
+	wg       *sync.WaitGroup // WaitGroup to track the number of connections still running
+	state    serverState     // tracks if the server is running or not
+	doneChan chan struct{}   // tracks if we want to exit
+	killChan chan struct{}   // tracks if we're blindly killing connections
 }
 
+// getKillChan is used to get or create the kill channel
 func (srv *Server) getKillChan() chan struct{} {
 	srv.mu.Lock()
 	defer srv.mu.Unlock()
@@ -66,6 +70,8 @@ func (srv *Server) getKillChan() chan struct{} {
 	return srv.killChan
 }
 
+// lockedCloseKillChan will close the kill channel if it hasn't already been
+// closed. Note that this assumes srv.mu is held.
 func (srv *Server) lockedCloseKillChan() {
 	if srv.killChan != nil {
 		close(srv.killChan)
@@ -73,6 +79,7 @@ func (srv *Server) lockedCloseKillChan() {
 	}
 }
 
+// getKillChan is used to get or create the done channel
 func (srv *Server) getDoneChan() chan struct{} {
 	srv.mu.Lock()
 	defer srv.mu.Unlock()
@@ -84,6 +91,8 @@ func (srv *Server) getDoneChan() chan struct{} {
 	return srv.doneChan
 }
 
+// lockedCloseDoneChan will close the done channel if it hasn't already been
+// closed. Note that this assumes srv.mu is held.
 func (srv *Server) lockedCloseDoneChan() {
 	if srv.doneChan != nil {
 		close(srv.doneChan)
@@ -91,6 +100,7 @@ func (srv *Server) lockedCloseDoneChan() {
 	}
 }
 
+// getKillChan is used to get or create the wait group
 func (srv *Server) getWaitGroup() *sync.WaitGroup {
 	srv.mu.Lock()
 	defer srv.mu.Unlock()
@@ -185,13 +195,18 @@ func (srv *Server) Serve(l net.Listener) error {
 	srv.listener = l
 	srv.mu.Unlock()
 
+	// Store values for the done channel, kill channels and wait group so we
+	// can still access the values even after they've been closed.
 	srvDoneChan := srv.getDoneChan()
 	srvKillChan := srv.getKillChan()
-
 	wg := srv.getWaitGroup()
+
+	// We want to ensure this exits before srv.Close/Shutdown
 	wg.Add(1)
 	defer wg.Done()
 
+	// This nasty piece of work cleans up everything we can before this function
+	// exits
 	defer func() {
 		srv.mu.Lock()
 		defer srv.mu.Unlock()
@@ -201,8 +216,8 @@ func (srv *Server) Serve(l net.Listener) error {
 		// If there's still a listener around, we need to close it
 		if srv.listener != nil {
 			srv.listener.Close()
+			srv.listener = nil
 		}
-		srv.listener = nil
 
 		srv.doneChan = nil
 		srv.killChan = nil
@@ -220,11 +235,16 @@ func (srv *Server) Serve(l net.Listener) error {
 	for {
 		conn, e := l.Accept()
 		if e != nil {
+			// If we got an error while accepting (meaning the listener was
+			// closed) but we're already listed as trying to close the server,
+			// return ErrServerClosed rather than whatever error was returned
+			// from Accept
 			select {
 			case <-srvDoneChan:
 				return ErrServerClosed
 			default:
 			}
+
 			if ne, ok := e.(net.Error); ok && ne.Temporary() {
 				if tempDelay == 0 {
 					tempDelay = 5 * time.Millisecond
@@ -245,39 +265,23 @@ func (srv *Server) Serve(l net.Listener) error {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+
 			doneChan := make(chan struct{}, 1)
 			go func() {
 				srv.handleConn(conn, config)
 				doneChan <- struct{}{}
 			}()
+
+			// If doneChan gets a value first, we can just be on our merry way,
+			// but if we get notified from killChan, we need to nuke the
+			// connection.
 			select {
 			case <-doneChan:
 			case <-srvKillChan:
-
 				conn.Close()
 			}
 		}()
 	}
-}
-
-// Drain will signal for the server to drain connections and shut down.
-func (srv *Server) Drain() error {
-	srv.mu.Lock()
-	defer srv.mu.Unlock()
-
-	if srv.state != stateStarted {
-		return ErrInvalidState
-	}
-
-	// Update the state to draining, close the listener and send notify Serve
-	// that we're shutting down. Calling Close will force Accept to return with
-	// an error which should be acceptable as long as we wait for the
-	// connections to exit.
-	srv.state = stateDraining
-	srv.listener.Close()
-	srv.listener = nil
-
-	return nil
 }
 
 func (srv *Server) Close() error {
@@ -288,7 +292,8 @@ func (srv *Server) Close() error {
 		return ErrInvalidState
 	}
 
-	// Close the doneChan and listeners so connections close.
+	// Close the doneChan, killChan and listeners so we stop accepting new
+	// connections and ensure existing connections start getting shut down.
 	srv.lockedCloseDoneChan()
 	srv.lockedCloseKillChan()
 	lerr := srv.listener.Close()
@@ -298,6 +303,7 @@ func (srv *Server) Close() error {
 	wg := srv.wg
 	srv.mu.Unlock()
 
+	// Now that we've asked everything to close, we wait for Serve to exit
 	wg.Wait()
 
 	return lerr
@@ -320,6 +326,8 @@ func (srv *Server) Shutdown(ctx context.Context) error {
 	wg := srv.wg
 	srv.mu.Unlock()
 
+	// We need a chan from this waitgroup because we need to select on this and
+	// the ctx.Done() channel in case they asked for a timeout.
 	wgDoneChan := make(chan struct{}, 1)
 	go func() {
 		wg.Wait()
