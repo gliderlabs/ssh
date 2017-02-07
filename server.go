@@ -1,6 +1,7 @@
 package ssh
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -15,6 +16,10 @@ var (
 	// something but the server is either already running and shouldn't be or
 	// vice versa.
 	ErrInvalidState = errors.New("Invalid server state")
+
+	// ErrServerClosed will be returned from Serve if Close or Shutdown were
+	// called.
+	ErrServerClosed = errors.New("Server has been closed")
 )
 
 type serverState int
@@ -41,9 +46,60 @@ type Server struct {
 
 	// Internal fields. Note that the zero value for these should be a state we
 	// can detect so the Server can still be instantiated using &Server{}.
-	stateLock sync.Mutex
-	state     serverState
-	listener  net.Listener
+	listener net.Listener
+
+	mu       sync.Mutex
+	wg       *sync.WaitGroup
+	state    serverState
+	doneChan chan struct{}
+	killChan chan struct{}
+}
+
+func (srv *Server) getKillChan() chan struct{} {
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+
+	if srv.killChan == nil {
+		srv.killChan = make(chan struct{})
+	}
+
+	return srv.killChan
+}
+
+func (srv *Server) lockedCloseKillChan() {
+	if srv.killChan != nil {
+		close(srv.killChan)
+		srv.killChan = nil
+	}
+}
+
+func (srv *Server) getDoneChan() chan struct{} {
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+
+	if srv.doneChan == nil {
+		srv.doneChan = make(chan struct{})
+	}
+
+	return srv.doneChan
+}
+
+func (srv *Server) lockedCloseDoneChan() {
+	if srv.doneChan != nil {
+		close(srv.doneChan)
+		srv.doneChan = nil
+	}
+}
+
+func (srv *Server) getWaitGroup() *sync.WaitGroup {
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+
+	if srv.wg == nil {
+		srv.wg = &sync.WaitGroup{}
+	}
+
+	return srv.wg
 }
 
 func (srv *Server) makeConfig() (*gossh.ServerConfig, error) {
@@ -98,8 +154,8 @@ func (srv *Server) makeConfig() (*gossh.ServerConfig, error) {
 
 // Handle sets the Handler for the server.
 func (srv *Server) Handle(fn Handler) error {
-	srv.stateLock.Lock()
-	defer srv.stateLock.Unlock()
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
 
 	if srv.state != stateStopped {
 		return ErrInvalidState
@@ -119,21 +175,26 @@ func (srv *Server) Handle(fn Handler) error {
 func (srv *Server) Serve(l net.Listener) error {
 	// Ensure we're just starting the server and set up any values which need to
 	// be set up.
-	srv.stateLock.Lock()
+	srv.mu.Lock()
 	if srv.state != stateStopped {
 		l.Close()
-		srv.stateLock.Unlock()
+		srv.mu.Unlock()
 		return ErrInvalidState
 	}
 	srv.state = stateStarted
 	srv.listener = l
-	srv.stateLock.Unlock()
+	srv.mu.Unlock()
 
-	wg := &sync.WaitGroup{}
+	srvDoneChan := srv.getDoneChan()
+	srvKillChan := srv.getKillChan()
+
+	wg := srv.getWaitGroup()
+	wg.Add(1)
+	defer wg.Done()
 
 	defer func() {
-		srv.stateLock.Lock()
-		defer srv.stateLock.Unlock()
+		srv.mu.Lock()
+		defer srv.mu.Unlock()
 
 		srv.state = stateStopped
 
@@ -142,6 +203,9 @@ func (srv *Server) Serve(l net.Listener) error {
 			srv.listener.Close()
 		}
 		srv.listener = nil
+
+		srv.doneChan = nil
+		srv.killChan = nil
 	}()
 
 	config, err := srv.makeConfig()
@@ -152,12 +216,15 @@ func (srv *Server) Serve(l net.Listener) error {
 		srv.Handler = DefaultHandler
 	}
 
-	defer wg.Wait()
-
 	var tempDelay time.Duration
 	for {
 		conn, e := l.Accept()
 		if e != nil {
+			select {
+			case <-srvDoneChan:
+				return ErrServerClosed
+			default:
+			}
 			if ne, ok := e.(net.Error); ok && ne.Temporary() {
 				if tempDelay == 0 {
 					tempDelay = 5 * time.Millisecond
@@ -178,15 +245,25 @@ func (srv *Server) Serve(l net.Listener) error {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			srv.handleConn(conn, config)
+			doneChan := make(chan struct{}, 1)
+			go func() {
+				srv.handleConn(conn, config)
+				doneChan <- struct{}{}
+			}()
+			select {
+			case <-doneChan:
+			case <-srvKillChan:
+
+				conn.Close()
+			}
 		}()
 	}
 }
 
 // Drain will signal for the server to drain connections and shut down.
 func (srv *Server) Drain() error {
-	srv.stateLock.Lock()
-	defer srv.stateLock.Unlock()
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
 
 	if srv.state != stateStarted {
 		return ErrInvalidState
@@ -201,6 +278,64 @@ func (srv *Server) Drain() error {
 	srv.listener = nil
 
 	return nil
+}
+
+func (srv *Server) Close() error {
+	srv.mu.Lock()
+
+	if srv.state == stateStopped {
+		srv.mu.Unlock()
+		return ErrInvalidState
+	}
+
+	// Close the doneChan and listeners so connections close.
+	srv.lockedCloseDoneChan()
+	srv.lockedCloseKillChan()
+	lerr := srv.listener.Close()
+	srv.listener = nil
+
+	// Grab the waitgroup then unlock
+	wg := srv.wg
+	srv.mu.Unlock()
+
+	wg.Wait()
+
+	return lerr
+}
+
+func (srv *Server) Shutdown(ctx context.Context) error {
+	srv.mu.Lock()
+
+	if srv.state == stateStopped {
+		srv.mu.Unlock()
+		return ErrInvalidState
+	}
+
+	// Close the listeners so everyone knows we're done.
+	srv.lockedCloseDoneChan()
+	lerr := srv.listener.Close()
+	srv.listener = nil
+
+	// Grab the waitgroup then unlock
+	wg := srv.wg
+	srv.mu.Unlock()
+
+	wgDoneChan := make(chan struct{}, 1)
+	go func() {
+		wg.Wait()
+		wgDoneChan <- struct{}{}
+	}()
+
+	select {
+	case <-ctx.Done():
+	case <-wgDoneChan:
+	}
+
+	srv.mu.Lock()
+	srv.lockedCloseKillChan()
+	srv.mu.Unlock()
+
+	return lerr
 }
 
 func (srv *Server) handleConn(conn net.Conn, conf *gossh.ServerConfig) {
