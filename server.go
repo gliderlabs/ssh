@@ -399,8 +399,8 @@ func (srv *Server) AddHostKey(key Signer) {
 
 // SetOption runs a functional option against the server.
 func (srv *Server) SetOption(option Option) error {
-	srv.stateLock.Lock()
-	defer srv.stateLock.Unlock()
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
 
 	if srv.state != stateStopped {
 		return ErrInvalidState
