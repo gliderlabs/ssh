@@ -235,12 +235,14 @@ func TestPtyResize(t *testing.T) {
 		},
 	}, nil)
 	defer cleanup()
+	// winch0
 	if err := session.RequestPty("xterm", winch0.Height, winch0.Width, gossh.TerminalModes{}); err != nil {
 		t.Fatalf("unexpected error requesting PTY", err)
 	}
 	if err := session.Shell(); err != nil {
 		t.Fatalf("expected nil but got %v", err)
 	}
+	// winch1
 	winchMsg := struct{ w, h uint32 }{uint32(winch1.Width), uint32(winch1.Height)}
 	ok, err := session.SendRequest("window-change", true, gossh.Marshal(&winchMsg))
 	if err == nil && !ok {
@@ -250,6 +252,7 @@ func TestPtyResize(t *testing.T) {
 	if gotWinch != winch1 {
 		t.Fatalf("expected window %#v but got %#v", winch1, gotWinch)
 	}
+	// winch2
 	winchMsg = struct{ w, h uint32 }{uint32(winch2.Width), uint32(winch2.Height)}
 	ok, err = session.SendRequest("window-change", true, gossh.Marshal(&winchMsg))
 	if err == nil && !ok {

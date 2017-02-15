@@ -119,7 +119,7 @@ func parseString(in []byte) (out string, rest []byte, ok bool) {
 	return
 }
 
-func parseUint32(in []byte) (out uint32, rest []byte, ok bool) {
+func parseUint32(in []byte) (uint32, []byte, bool) {
 	if len(in) < 4 {
 		return 0, nil, false
 	}
