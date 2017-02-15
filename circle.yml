@@ -1,7 +1,3 @@
-dependencies:
-  pre:
-    - make circleci
-
 test:
   override:
-    - make test
+    - go test -v -race
