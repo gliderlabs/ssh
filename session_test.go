@@ -242,13 +242,17 @@ func TestPtyResize(t *testing.T) {
 	if err := session.Shell(); err != nil {
 		t.Fatalf("expected nil but got %v", err)
 	}
+	gotWinch := <-winches
+	if gotWinch != winch0 {
+		t.Fatalf("expected window %#v but got %#v", winch0, gotWinch)
+	}
 	// winch1
 	winchMsg := struct{ w, h uint32 }{uint32(winch1.Width), uint32(winch1.Height)}
 	ok, err := session.SendRequest("window-change", true, gossh.Marshal(&winchMsg))
 	if err == nil && !ok {
 		t.Fatalf("unexpected error or bad reply on send request")
 	}
-	gotWinch := <-winches
+	gotWinch = <-winches
 	if gotWinch != winch1 {
 		t.Fatalf("expected window %#v but got %#v", winch1, gotWinch)
 	}
