@@ -24,9 +24,6 @@ var (
 
 type serverState int
 
-// TODO: More states, in particular around how Close and Shutdown will interact
-// TODO: Ensure we properly handle closing killChan, specifically when using
-// Shutdown.
 const (
 	stateStopped serverState = iota
 	stateStarted
@@ -94,8 +91,6 @@ func (srv *Server) makeConfig() (*gossh.ServerConfig, error) {
 			if ok := srv.PublicKeyHandler(conn.User(), key); !ok {
 				return perms, fmt.Errorf("permission denied")
 			}
-			// no other way to pass the key from
-			// auth handler to session handler
 			perms.Extensions = map[string]string{
 				"_publickey": string(key.Marshal()),
 			}
