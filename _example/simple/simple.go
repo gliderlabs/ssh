@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"log"
 
@@ -8,12 +9,10 @@ import (
 )
 
 func main() {
-
 	ssh.Handle(func(s ssh.Session) {
-		user := s.User()
-		io.WriteString(s, "Hello "+user+"\n")
+		io.WriteString(s, fmt.Sprintf("Hello %s\n", s.User()))
 	})
 
-	log.Println("starting ssh server on port: 2222")
+	log.Println("starting ssh server on port 2222...")
 	log.Fatal(ssh.ListenAndServe(":2222", nil))
 }

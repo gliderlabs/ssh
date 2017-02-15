@@ -59,6 +59,8 @@ func (srv *Server) makeConfig() (*gossh.ServerConfig, error) {
 			if ok := srv.PublicKeyHandler(conn.User(), key); !ok {
 				return perms, fmt.Errorf("permission denied")
 			}
+			// no other way to pass the key from
+			// auth handler to session handler
 			perms.Extensions = map[string]string{
 				"_publickey": string(key.Marshal()),
 			}
