@@ -170,7 +170,8 @@ func (sess *session) handleRequests(reqs <-chan *gossh.Request) {
 			ptyReq, ok := parsePtyRequest(req.Payload)
 			if ok {
 				sess.pty = &ptyReq
-				sess.winch = make(chan Window)
+				sess.winch = make(chan Window, 1)
+				sess.winch <- ptyReq.Window
 				defer func() {
 					close(sess.winch)
 				}()

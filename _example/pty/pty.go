@@ -28,7 +28,6 @@ func main() {
 			if err != nil {
 				panic(err)
 			}
-			setWinsize(f, ptyReq.Window.Width, ptyReq.Window.Height)
 			go func() {
 				for win := range winCh {
 					setWinsize(f, win.Width, win.Height)
