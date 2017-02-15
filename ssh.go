@@ -43,6 +43,9 @@ type PasswordHandler func(user, password string) bool
 // PermissionsCallback is a hook for setting up user permissions.
 type PermissionsCallback func(user string, permissions *Permissions) error
 
+// ChannelCallback is a hook for allowing new channels.
+type ChannelCallback func(user string, permissions *Permissions) bool
+
 // PtyCallback is a hook for allowing PTY sessions.
 type PtyCallback func(user string, permissions *Permissions) bool
 
