@@ -302,6 +302,18 @@ func (srv *Server) Shutdown(ctx context.Context) error {
 
 	select {
 	case <-ctx.Done():
+		srv.mu.Lock()
+		// If the state is still draining, kill everything so Serve will return
+		// cleanly.
+		if srv.state == stateDraining {
+			close(srv.killChan)
+		}
+		srv.mu.Unlock()
+
+		// If we've done our best to close connections, we should wait for all
+		// of them to clean up properly, even if there was a timeout because
+		// this should be fairly quick.
+		<-wgDoneChan
 	case <-wgDoneChan:
 	}
 
