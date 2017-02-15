@@ -54,44 +54,53 @@ func generateSigner() (ssh.Signer, error) {
 	return ssh.NewSignerFromKey(key)
 }
 
-func parsePtyRequest(s []byte) (width, height int, ok bool) {
-	_, s, ok = parseString(s)
+func parsePtyRequest(s []byte) (pty Pty, ok bool) {
+	term, s, ok := parseString(s)
 	if !ok {
 		return
 	}
 	width32, s, ok := parseUint32(s)
+	if width32 < 1 {
+		ok = false
+	}
 	if !ok {
 		return
 	}
 	height32, _, ok := parseUint32(s)
-	width = int(width32)
-	height = int(height32)
-	if width < 1 {
+	if height32 < 1 {
 		ok = false
 	}
-	if height < 1 {
-		ok = false
+	if !ok {
+		return
+	}
+	pty = Pty{
+		Term: term,
+		Window: Window{
+			Width:  int(width32),
+			Height: int(height32),
+		},
 	}
 	return
 }
 
-func parseWinchRequest(s []byte) (width, height int, ok bool) {
-	width32, _, ok := parseUint32(s)
+func parseWinchRequest(s []byte) (win Window, ok bool) {
+	width32, s, ok := parseUint32(s)
+	if width32 < 1 {
+		ok = false
+	}
 	if !ok {
 		return
 	}
 	height32, _, ok := parseUint32(s)
+	if height32 < 1 {
+		ok = false
+	}
 	if !ok {
 		return
 	}
-
-	width = int(width32)
-	height = int(height32)
-	if width < 1 {
-		ok = false
-	}
-	if height < 1 {
-		ok = false
+	win = Window{
+		Width:  int(width32),
+		Height: int(height32),
 	}
 	return
 }
@@ -110,7 +119,7 @@ func parseString(in []byte) (out string, rest []byte, ok bool) {
 	return
 }
 
-func parseUint32(in []byte) (uint32, []byte, bool) {
+func parseUint32(in []byte) (out uint32, rest []byte, ok bool) {
 	if len(in) < 4 {
 		return 0, nil, false
 	}

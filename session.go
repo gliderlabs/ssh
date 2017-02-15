@@ -126,8 +126,6 @@ func (sess *session) Pty() (Pty, <-chan Window, bool) {
 
 func (sess *session) handleRequests(reqs <-chan *gossh.Request) {
 	for req := range reqs {
-		var width, height int
-		var ok bool
 		switch req.Type {
 		case "shell", "exec":
 			if sess.handled {
@@ -135,7 +133,9 @@ func (sess *session) handleRequests(reqs <-chan *gossh.Request) {
 				continue
 			}
 			sess.handled = true
-			req.Reply(true, nil)
+			if req.WantReply {
+				req.Reply(true, nil)
+			}
 
 			var payload = struct{ Value string }{}
 			gossh.Unmarshal(req.Payload, &payload)
@@ -152,6 +152,9 @@ func (sess *session) handleRequests(reqs <-chan *gossh.Request) {
 			var kv = struct{ Key, Value string }{}
 			gossh.Unmarshal(req.Payload, &kv)
 			sess.env = append(sess.env, fmt.Sprintf("%s=%s", kv.Key, kv.Value))
+			if req.WantReply {
+				req.Reply(true, nil)
+			}
 		case "pty-req":
 			if sess.handled {
 				req.Reply(false, nil)
@@ -164,22 +167,29 @@ func (sess *session) handleRequests(reqs <-chan *gossh.Request) {
 					continue
 				}
 			}
-			width, height, ok = parsePtyRequest(req.Payload)
+			ptyReq, ok := parsePtyRequest(req.Payload)
 			if ok {
-				sess.pty = &Pty{Window{width, height}}
+				sess.pty = &ptyReq
 				sess.winch = make(chan Window)
+				defer func() {
+					close(sess.winch)
+				}()
 			}
-
-			req.Reply(ok, nil)
+			if req.WantReply {
+				req.Reply(ok, nil)
+			}
 		case "window-change":
 			if sess.pty == nil {
 				req.Reply(false, nil)
 				continue
 			}
-			width, height, ok = parseWinchRequest(req.Payload)
+			win, ok := parseWinchRequest(req.Payload)
 			if ok {
-				sess.pty.Window = Window{width, height}
-				sess.winch <- sess.pty.Window
+				sess.pty.Window = win
+				sess.winch <- win
+			}
+			if req.WantReply {
+				req.Reply(ok, nil)
 			}
 		}
 	}
