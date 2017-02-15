@@ -58,60 +58,6 @@ type Server struct {
 	killChan chan struct{}   // tracks if we're blindly killing connections
 }
 
-// getKillChan is used to get or create the kill channel
-func (srv *Server) getKillChan() chan struct{} {
-	srv.mu.Lock()
-	defer srv.mu.Unlock()
-
-	if srv.killChan == nil {
-		srv.killChan = make(chan struct{})
-	}
-
-	return srv.killChan
-}
-
-// lockedCloseKillChan will close the kill channel if it hasn't already been
-// closed. Note that this assumes srv.mu is held.
-func (srv *Server) lockedCloseKillChan() {
-	if srv.killChan != nil {
-		close(srv.killChan)
-		srv.killChan = nil
-	}
-}
-
-// getKillChan is used to get or create the done channel
-func (srv *Server) getDoneChan() chan struct{} {
-	srv.mu.Lock()
-	defer srv.mu.Unlock()
-
-	if srv.doneChan == nil {
-		srv.doneChan = make(chan struct{})
-	}
-
-	return srv.doneChan
-}
-
-// lockedCloseDoneChan will close the done channel if it hasn't already been
-// closed. Note that this assumes srv.mu is held.
-func (srv *Server) lockedCloseDoneChan() {
-	if srv.doneChan != nil {
-		close(srv.doneChan)
-		srv.doneChan = nil
-	}
-}
-
-// getKillChan is used to get or create the wait group
-func (srv *Server) getWaitGroup() *sync.WaitGroup {
-	srv.mu.Lock()
-	defer srv.mu.Unlock()
-
-	if srv.wg == nil {
-		srv.wg = &sync.WaitGroup{}
-	}
-
-	return srv.wg
-}
-
 func (srv *Server) makeConfig() (*gossh.ServerConfig, error) {
 	config := &gossh.ServerConfig{}
 	if len(srv.HostSigners) == 0 {
@@ -191,15 +137,25 @@ func (srv *Server) Serve(l net.Listener) error {
 		srv.mu.Unlock()
 		return ErrInvalidState
 	}
+
+	// Server struct initialization can go here. We know we're coming from the
+	// stopped state, so this is safe to do.
 	srv.state = stateStarted
 	srv.listener = l
-	srv.mu.Unlock()
+	srv.doneChan = make(chan struct{})
+	srv.killChan = make(chan struct{})
+	srv.wg = &sync.WaitGroup{}
 
 	// Store values for the done channel, kill channels and wait group so we
-	// can still access the values even after they've been closed.
-	srvDoneChan := srv.getDoneChan()
-	srvKillChan := srv.getKillChan()
-	wg := srv.getWaitGroup()
+	// can still access the values even after they've been closed and set to
+	// nil.
+	var (
+		srvDoneChan = srv.doneChan
+		srvKillChan = srv.killChan
+		wg          = srv.wg
+	)
+
+	srv.mu.Unlock()
 
 	// We want to ensure this exits before srv.Close/Shutdown
 	wg.Add(1)
@@ -219,8 +175,16 @@ func (srv *Server) Serve(l net.Listener) error {
 			srv.listener = nil
 		}
 
-		srv.doneChan = nil
-		srv.killChan = nil
+		// Clean up any leftover variables
+		srv.wg = nil
+		if srv.doneChan != nil {
+			close(srv.doneChan)
+			srv.doneChan = nil
+		}
+		if srv.killChan != nil {
+			close(srv.killChan)
+			srv.killChan = nil
+		}
 	}()
 
 	config, err := srv.makeConfig()
@@ -287,15 +251,18 @@ func (srv *Server) Serve(l net.Listener) error {
 func (srv *Server) Close() error {
 	srv.mu.Lock()
 
-	if srv.state == stateStopped {
+	// We only want to be able to do this if the server is running and not
+	// draining. Waiting on the wg at the end will ensure that when this
+	// function returns, the state will be stateStopped.
+	if srv.state != stateStarted {
 		srv.mu.Unlock()
 		return ErrInvalidState
 	}
 
 	// Close the doneChan, killChan and listeners so we stop accepting new
 	// connections and ensure existing connections start getting shut down.
-	srv.lockedCloseDoneChan()
-	srv.lockedCloseKillChan()
+	close(srv.doneChan)
+	close(srv.killChan)
 	lerr := srv.listener.Close()
 	srv.listener = nil
 
@@ -312,13 +279,17 @@ func (srv *Server) Close() error {
 func (srv *Server) Shutdown(ctx context.Context) error {
 	srv.mu.Lock()
 
-	if srv.state == stateStopped {
+	// Similar to Close, we only want to do this if the server is running and
+	// not already draining.
+	if srv.state != stateStarted {
 		srv.mu.Unlock()
 		return ErrInvalidState
 	}
 
+	srv.state = stateDraining
+
 	// Close the listeners so everyone knows we're done.
-	srv.lockedCloseDoneChan()
+	close(srv.doneChan)
 	lerr := srv.listener.Close()
 	srv.listener = nil
 
@@ -338,10 +309,6 @@ func (srv *Server) Shutdown(ctx context.Context) error {
 	case <-ctx.Done():
 	case <-wgDoneChan:
 	}
-
-	srv.mu.Lock()
-	srv.lockedCloseKillChan()
-	srv.mu.Unlock()
 
 	return lerr
 }
