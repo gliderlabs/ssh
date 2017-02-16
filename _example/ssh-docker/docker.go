@@ -74,7 +74,7 @@ func dockerRun(cfg *container.Config, sess ssh.Session) (err error, status int64
 	go func() {
 		var err error
 		if cfg.Tty {
-			_, err = io.Copy(sess, stream.Conn)
+			_, err = io.Copy(sess, stream.Reader)
 		} else {
 			_, err = stdcopy.StdCopy(sess, sess.Stderr(), stream.Reader)
 		}
