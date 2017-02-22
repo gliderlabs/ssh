@@ -14,26 +14,72 @@ type contextKey struct {
 }
 
 var (
-	ContextKeyUser          = &contextKey{"user"}
-	ContextKeySessionID     = &contextKey{"session-id"}
-	ContextKeyPermissions   = &contextKey{"permissions"}
+	// ContextKeyUser is a context key for use with Contexts in this package.
+	// The associated value will be of type string.
+	ContextKeyUser = &contextKey{"user"}
+
+	// ContextKeySessionID is a context key for use with Contexts in this package.
+	// The associated value will be of type []byte.
+	ContextKeySessionID = &contextKey{"session-id"}
+
+	// ContextKeyPermissions is a context key for use with Contexts in this package.
+	// The associated value will be of type *Permissions.
+	ContextKeyPermissions = &contextKey{"permissions"}
+
+	// ContextKeyClientVersion is a context key for use with Contexts in this package.
+	// The associated value will be of type []byte.
 	ContextKeyClientVersion = &contextKey{"client-version"}
+
+	// ContextKeyServerVersion is a context key for use with Contexts in this package.
+	// The associated value will be of type []byte.
 	ContextKeyServerVersion = &contextKey{"server-version"}
-	ContextKeyLocalAddr     = &contextKey{"local-addr"}
-	ContextKeyRemoteAddr    = &contextKey{"remote-addr"}
-	ContextKeyServer        = &contextKey{"ssh-server"}
-	ContextKeyPublicKey     = &contextKey{"public-key"}
+
+	// ContextKeyLocalAddr is a context key for use with Contexts in this package.
+	// The associated value will be of type net.Addr.
+	ContextKeyLocalAddr = &contextKey{"local-addr"}
+
+	// ContextKeyRemoteAddr is a context key for use with Contexts in this package.
+	// The associated value will be of type net.Addr.
+	ContextKeyRemoteAddr = &contextKey{"remote-addr"}
+
+	// ContextKeyServer is a context key for use with Contexts in this package.
+	// The associated value will be of type *Server.
+	ContextKeyServer = &contextKey{"ssh-server"}
+
+	// ContextKeyPublicKey is a context key for use with Contexts in this package.
+	// The associated value will be of type PublicKey.
+	ContextKeyPublicKey = &contextKey{"public-key"}
 )
 
+// Context is a package specific context interface. It exposes connection
+// metadata and allows new values to be easily written to it. It's used in
+// authentication handlers and callbacks, and its underlying context.Context is
+// exposed on Session in the session Handler.
 type Context interface {
 	context.Context
+
+	// User returns the username used when establishing the SSH connection.
 	User() string
+
+	// SessionID returns the session hash.
 	SessionID() string
+
+	// ClientVersion returns the version reported by the client.
 	ClientVersion() string
+
+	// ServerVersion returns the version reported by the server.
 	ServerVersion() string
+
+	// RemoteAddr returns the remote address for this connection.
 	RemoteAddr() net.Addr
+
+	// LocalAddr returns the local address for this connection.
 	LocalAddr() net.Addr
+
+	// Permissions returns the Permissions object used for this connection.
 	Permissions() *Permissions
+
+	// SetValue allows you to easily write new values into the underlying context.
 	SetValue(key, value interface{})
 }
 

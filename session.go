@@ -44,8 +44,13 @@ type Session interface {
 	// used it will return nil.
 	PublicKey() PublicKey
 
+	// Context returns the connection's context. The returned context is always
+	// non-nil and holds the same data as the Context passed into auth
+	// handlers and callbacks.
 	Context() context.Context
 
+	// Permissions returns a copy of the Permissions object that was available for
+	// setup in the auth handlers via the Context.
 	Permissions() Permissions
 
 	// Pty returns PTY information, a channel of window size changes, and a boolean
