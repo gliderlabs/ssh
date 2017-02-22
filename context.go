@@ -19,7 +19,7 @@ var (
 	ContextKeyUser = &contextKey{"user"}
 
 	// ContextKeySessionID is a context key for use with Contexts in this package.
-	// The associated value will be of type []byte.
+	// The associated value will be of type string.
 	ContextKeySessionID = &contextKey{"session-id"}
 
 	// ContextKeyPermissions is a context key for use with Contexts in this package.
@@ -27,11 +27,11 @@ var (
 	ContextKeyPermissions = &contextKey{"permissions"}
 
 	// ContextKeyClientVersion is a context key for use with Contexts in this package.
-	// The associated value will be of type []byte.
+	// The associated value will be of type string.
 	ContextKeyClientVersion = &contextKey{"client-version"}
 
 	// ContextKeyServerVersion is a context key for use with Contexts in this package.
-	// The associated value will be of type []byte.
+	// The associated value will be of type string.
 	ContextKeyServerVersion = &contextKey{"server-version"}
 
 	// ContextKeyLocalAddr is a context key for use with Contexts in this package.
@@ -101,12 +101,9 @@ func (ctx *sshContext) applyConnMetadata(conn gossh.ConnMetadata) {
 	if ctx.Value(ContextKeySessionID) != nil {
 		return
 	}
-	// for most of these, instead of converting to strings now, storing the byte
-	// slices means allocations only happen when accessing, not when contexts
-	// are being copied around
-	ctx.SetValue(ContextKeySessionID, conn.SessionID())
-	ctx.SetValue(ContextKeyClientVersion, conn.ClientVersion())
-	ctx.SetValue(ContextKeyServerVersion, conn.ServerVersion())
+	ctx.SetValue(ContextKeySessionID, string(conn.SessionID()))
+	ctx.SetValue(ContextKeyClientVersion, string(conn.ClientVersion()))
+	ctx.SetValue(ContextKeyServerVersion, string(conn.ServerVersion()))
 	ctx.SetValue(ContextKeyUser, conn.User())
 	ctx.SetValue(ContextKeyLocalAddr, conn.LocalAddr())
 	ctx.SetValue(ContextKeyRemoteAddr, conn.RemoteAddr())
@@ -121,18 +118,15 @@ func (ctx *sshContext) User() string {
 }
 
 func (ctx *sshContext) SessionID() string {
-	id, _ := ctx.Value(ContextKeySessionID).([]byte)
-	return string(id)
+	return ctx.Value(ContextKeySessionID).(string)
 }
 
 func (ctx *sshContext) ClientVersion() string {
-	version, _ := ctx.Value(ContextKeyClientVersion).([]byte)
-	return string(version)
+	return ctx.Value(ContextKeyClientVersion).(string)
 }
 
 func (ctx *sshContext) ServerVersion() string {
-	version, _ := ctx.Value(ContextKeyServerVersion).([]byte)
-	return string(version)
+	return ctx.Value(ContextKeyServerVersion).(string)
 }
 
 func (ctx *sshContext) RemoteAddr() net.Addr {
