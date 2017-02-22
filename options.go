@@ -56,7 +56,7 @@ func HostKeyPEM(bytes []byte) Option {
 // denying PTY requests.
 func NoPty() Option {
 	return func(srv *Server) error {
-		srv.PtyCallback = func(user string, permissions *Permissions) bool {
+		srv.PtyCallback = func(ctx Context, pty Pty) bool {
 			return false
 		}
 		return nil

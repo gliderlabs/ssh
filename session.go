@@ -2,6 +2,7 @@ package ssh
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -43,6 +44,10 @@ type Session interface {
 	// used it will return nil.
 	PublicKey() PublicKey
 
+	Context() context.Context
+
+	Permissions() Permissions
+
 	// Pty returns PTY information, a channel of window size changes, and a boolean
 	// of whether or not a PTY was accepted for this session.
 	Pty() (Pty, <-chan Window, bool)
@@ -61,6 +66,7 @@ type session struct {
 	env     []string
 	ptyCb   PtyCallback
 	cmd     []string
+	ctx     *sshContext
 }
 
 func (sess *session) Write(p []byte) (n int, err error) {
@@ -80,18 +86,18 @@ func (sess *session) Write(p []byte) (n int, err error) {
 }
 
 func (sess *session) PublicKey() PublicKey {
-	if sess.conn.Permissions == nil {
-		return nil
-	}
-	s, ok := sess.conn.Permissions.Extensions["_publickey"]
-	if !ok {
-		return nil
-	}
-	key, err := ParsePublicKey([]byte(s))
-	if err != nil {
-		return nil
-	}
-	return key
+	return sess.ctx.Value(ContextKeyPublicKey).(PublicKey)
+}
+
+func (sess *session) Permissions() Permissions {
+	// use context permissions because its properly
+	// wrapped and easier to dereference
+	perms := sess.ctx.Value(ContextKeyPermissions).(*Permissions)
+	return *perms
+}
+
+func (sess *session) Context() context.Context {
+	return sess.ctx.Context
 }
 
 func (sess *session) Exit(code int) error {
@@ -163,22 +169,25 @@ func (sess *session) handleRequests(reqs <-chan *gossh.Request) {
 				req.Reply(false, nil)
 				continue
 			}
+			ptyReq, ok := parsePtyRequest(req.Payload)
+			if !ok {
+				req.Reply(false, nil)
+				continue
+			}
 			if sess.ptyCb != nil {
-				ok := sess.ptyCb(sess.conn.User(), &Permissions{sess.conn.Permissions})
+				ok := sess.ptyCb(sess.ctx, ptyReq)
 				if !ok {
 					req.Reply(false, nil)
 					continue
 				}
 			}
-			ptyReq, ok := parsePtyRequest(req.Payload)
-			if ok {
-				sess.pty = &ptyReq
-				sess.winch = make(chan Window, 1)
-				sess.winch <- ptyReq.Window
-				defer func() {
-					close(sess.winch)
-				}()
-			}
+			sess.pty = &ptyReq
+			sess.winch = make(chan Window, 1)
+			sess.winch <- ptyReq.Window
+			defer func() {
+				// when reqs is closed
+				close(sess.winch)
+			}()
 			req.Reply(ok, nil)
 		case "window-change":
 			if sess.pty == nil {

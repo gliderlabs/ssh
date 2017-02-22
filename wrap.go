@@ -10,8 +10,7 @@ type PublicKey interface {
 // The Permissions type holds fine-grained permissions that are specific to a
 // user or a specific authentication method for a user. Permissions, except for
 // "source-address", must be enforced in the server application layer, after
-// successful authentication. The Permissions are passed on in ServerConn so a
-// server implementation can honor them.
+// successful authentication.
 type Permissions struct {
 	*gossh.Permissions
 }

@@ -34,16 +34,13 @@ type Option func(*Server) error
 type Handler func(Session)
 
 // PublicKeyHandler is a callback for performing public key authentication.
-type PublicKeyHandler func(user string, key PublicKey) bool
+type PublicKeyHandler func(ctx Context, key PublicKey) bool
 
 // PasswordHandler is a callback for performing password authentication.
-type PasswordHandler func(user, password string) bool
-
-// PermissionsCallback is a hook for setting up user permissions.
-type PermissionsCallback func(user string, permissions *Permissions) error
+type PasswordHandler func(ctx Context, password string) bool
 
 // PtyCallback is a hook for allowing PTY sessions.
-type PtyCallback func(user string, permissions *Permissions) bool
+type PtyCallback func(ctx Context, pty Pty) bool
 
 // Window represents the size of a PTY window.
 type Window struct {
