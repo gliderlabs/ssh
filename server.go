@@ -19,6 +19,7 @@ type Server struct {
 
 	PasswordHandler     PasswordHandler     // password authentication handler
 	PublicKeyHandler    PublicKeyHandler    // public key authentication handler
+	ChannelCallback     ChannelCallback     // callback for allowing new channels, allows all if nil
 	PtyCallback         PtyCallback         // callback for allowing PTY sessions, allows all if nil
 	PermissionsCallback PermissionsCallback // optional callback for setting up permissions
 }
@@ -124,6 +125,10 @@ func (srv *Server) handleConn(conn net.Conn, conf *gossh.ServerConfig) {
 	for ch := range chans {
 		if ch.ChannelType() != "session" {
 			ch.Reject(gossh.UnknownChannelType, "unsupported channel type")
+			continue
+		}
+		if srv.ChannelCallback != nil && !srv.ChannelCallback(sshConn.User(), &Permissions{sshConn.Permissions}) {
+			ch.Reject(gossh.Prohibited, "administratively prohibited")
 			continue
 		}
 		go srv.handleChannel(sshConn, ch)
