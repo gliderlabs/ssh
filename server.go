@@ -243,6 +243,11 @@ func (srv *Server) Serve(l net.Listener) error {
 	}
 }
 
+// Close immediately closes the active net.Listener and any connections. For a
+// graceful shutdown, use Shutdown.
+//
+// Close returns any error returned from closing the Server's underlying
+// listener.
 func (srv *Server) Close() error {
 	srv.mu.Lock()
 
@@ -271,6 +276,11 @@ func (srv *Server) Close() error {
 	return lerr
 }
 
+// Shutdown gracefully shuts down the server without interrupting any active
+// connections. Shutdown works by first closing all open listeners then waiting
+// indefinitely for connections to return to idle and then shut down. If the
+// provided context expires before the shutdown is complete, then the all
+// connections are closed and the Context's error is returned.
 func (srv *Server) Shutdown(ctx context.Context) error {
 	srv.mu.Lock()
 
@@ -314,6 +324,8 @@ func (srv *Server) Shutdown(ctx context.Context) error {
 		// of them to clean up properly, even if there was a timeout because
 		// this should be fairly quick.
 		<-wgDoneChan
+
+		return ctx.Err()
 	case <-wgDoneChan:
 	}
 
