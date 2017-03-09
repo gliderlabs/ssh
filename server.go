@@ -262,7 +262,9 @@ func (srv *Server) Close() error {
 	// Close the doneChan, killChan and listeners so we stop accepting new
 	// connections and ensure existing connections start getting shut down.
 	close(srv.doneChan)
+	srv.doneChan = nil
 	close(srv.killChan)
+	srv.killChan = nil
 	lerr := srv.listener.Close()
 	srv.listener = nil
 
@@ -295,6 +297,7 @@ func (srv *Server) Shutdown(ctx context.Context) error {
 
 	// Close the listeners so everyone knows we're done.
 	close(srv.doneChan)
+	srv.doneChan = nil
 	lerr := srv.listener.Close()
 	srv.listener = nil
 
@@ -317,6 +320,7 @@ func (srv *Server) Shutdown(ctx context.Context) error {
 		// cleanly.
 		if srv.state == stateDraining {
 			close(srv.killChan)
+			srv.killChan = nil
 		}
 		srv.mu.Unlock()
 
