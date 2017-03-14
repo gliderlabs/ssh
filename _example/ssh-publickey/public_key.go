@@ -16,7 +16,7 @@ func main() {
 		s.Write(authorizedKey)
 	})
 
-	publicKeyOption := ssh.PublicKeyAuth(func(user string, key ssh.PublicKey) bool {
+	publicKeyOption := ssh.PublicKeyAuth(func(ctx ssh.Context, key ssh.PublicKey) bool {
 		return true // allow all keys, or use ssh.KeysEqual() to compare against known keys
 	})
 

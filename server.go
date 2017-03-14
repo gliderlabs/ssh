@@ -17,21 +17,24 @@ type Server struct {
 	HostSigners []Signer // private keys for the host key, must have at least one
 	Version     string   // server version to be sent before the initial handshake
 
-	PasswordHandler     PasswordHandler     // password authentication handler
-	PublicKeyHandler    PublicKeyHandler    // public key authentication handler
-	PtyCallback         PtyCallback         // callback for allowing PTY sessions, allows all if nil
-	PermissionsCallback PermissionsCallback // optional callback for setting up permissions
+	PasswordHandler  PasswordHandler  // password authentication handler
+	PublicKeyHandler PublicKeyHandler // public key authentication handler
+	PtyCallback      PtyCallback      // callback for allowing PTY sessions, allows all if nil
 }
 
-func (srv *Server) makeConfig() (*gossh.ServerConfig, error) {
-	config := &gossh.ServerConfig{}
+func (srv *Server) ensureHostSigner() error {
 	if len(srv.HostSigners) == 0 {
 		signer, err := generateSigner()
 		if err != nil {
-			return nil, err
+			return err
 		}
 		srv.HostSigners = append(srv.HostSigners, signer)
 	}
+	return nil
+}
+
+func (srv *Server) config(ctx *sshContext) *gossh.ServerConfig {
+	config := &gossh.ServerConfig{}
 	for _, signer := range srv.HostSigners {
 		config.AddHostKey(signer)
 	}
@@ -43,34 +46,24 @@ func (srv *Server) makeConfig() (*gossh.ServerConfig, error) {
 	}
 	if srv.PasswordHandler != nil {
 		config.PasswordCallback = func(conn gossh.ConnMetadata, password []byte) (*gossh.Permissions, error) {
-			perms := &gossh.Permissions{}
-			if ok := srv.PasswordHandler(conn.User(), string(password)); !ok {
-				return perms, fmt.Errorf("permission denied")
+			ctx.applyConnMetadata(conn)
+			if ok := srv.PasswordHandler(ctx, string(password)); !ok {
+				return ctx.Permissions().Permissions, fmt.Errorf("permission denied")
 			}
-			if srv.PermissionsCallback != nil {
-				srv.PermissionsCallback(conn.User(), &Permissions{perms})
-			}
-			return perms, nil
+			return ctx.Permissions().Permissions, nil
 		}
 	}
 	if srv.PublicKeyHandler != nil {
 		config.PublicKeyCallback = func(conn gossh.ConnMetadata, key gossh.PublicKey) (*gossh.Permissions, error) {
-			perms := &gossh.Permissions{}
-			if ok := srv.PublicKeyHandler(conn.User(), key); !ok {
-				return perms, fmt.Errorf("permission denied")
+			ctx.applyConnMetadata(conn)
+			if ok := srv.PublicKeyHandler(ctx, key); !ok {
+				return ctx.Permissions().Permissions, fmt.Errorf("permission denied")
 			}
-			// no other way to pass the key from
-			// auth handler to session handler
-			perms.Extensions = map[string]string{
-				"_publickey": string(key.Marshal()),
-			}
-			if srv.PermissionsCallback != nil {
-				srv.PermissionsCallback(conn.User(), &Permissions{perms})
-			}
-			return perms, nil
+			ctx.SetValue(ContextKeyPublicKey, key)
+			return ctx.Permissions().Permissions, nil
 		}
 	}
-	return config, nil
+	return config
 }
 
 // Handle sets the Handler for the server.
@@ -85,8 +78,7 @@ func (srv *Server) Handle(fn Handler) {
 // Serve always returns a non-nil error.
 func (srv *Server) Serve(l net.Listener) error {
 	defer l.Close()
-	config, err := srv.makeConfig()
-	if err != nil {
+	if err := srv.ensureHostSigner(); err != nil {
 		return err
 	}
 	if srv.Handler == nil {
@@ -110,41 +102,46 @@ func (srv *Server) Serve(l net.Listener) error {
 			}
 			return e
 		}
-		go srv.handleConn(conn, config)
+		go srv.handleConn(conn)
 	}
 }
 
-func (srv *Server) handleConn(conn net.Conn, conf *gossh.ServerConfig) {
+func (srv *Server) handleConn(conn net.Conn) {
 	defer conn.Close()
-	sshConn, chans, reqs, err := gossh.NewServerConn(conn, conf)
+	ctx := newContext(srv)
+	sshConn, chans, reqs, err := gossh.NewServerConn(conn, srv.config(ctx))
 	if err != nil {
+		// TODO: trigger event callback
 		return
 	}
+	ctx.applyConnMetadata(sshConn)
 	go gossh.DiscardRequests(reqs)
 	for ch := range chans {
 		if ch.ChannelType() != "session" {
 			ch.Reject(gossh.UnknownChannelType, "unsupported channel type")
 			continue
 		}
-		go srv.handleChannel(sshConn, ch)
+		go srv.handleChannel(sshConn, ch, ctx)
 	}
 }
 
-func (srv *Server) handleChannel(conn *gossh.ServerConn, newChan gossh.NewChannel) {
+func (srv *Server) handleChannel(conn *gossh.ServerConn, newChan gossh.NewChannel, ctx *sshContext) {
 	ch, reqs, err := newChan.Accept()
 	if err != nil {
+		// TODO: trigger event callback
 		return
 	}
-	sess := srv.newSession(conn, ch)
+	sess := srv.newSession(conn, ch, ctx)
 	sess.handleRequests(reqs)
 }
 
-func (srv *Server) newSession(conn *gossh.ServerConn, ch gossh.Channel) *session {
+func (srv *Server) newSession(conn *gossh.ServerConn, ch gossh.Channel, ctx *sshContext) *session {
 	sess := &session{
 		Channel: ch,
 		conn:    conn,
 		handler: srv.Handler,
 		ptyCb:   srv.PtyCallback,
+		ctx:     ctx,
 	}
 	return sess
 }

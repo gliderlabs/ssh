@@ -11,15 +11,14 @@ import (
 )
 
 func (srv *Server) serveOnce(l net.Listener) error {
-	config, err := srv.makeConfig()
-	if err != nil {
+	if err := srv.ensureHostSigner(); err != nil {
 		return err
 	}
 	conn, e := l.Accept()
 	if e != nil {
 		return e
 	}
-	srv.handleConn(conn, config)
+	srv.handleConn(conn)
 	return nil
 }
 
@@ -63,6 +62,7 @@ func newTestSession(t *testing.T, srv *Server, cfg *gossh.ClientConfig) (*gossh.
 }
 
 func TestStdout(t *testing.T) {
+	t.Parallel()
 	testBytes := []byte("Hello world\n")
 	session, cleanup := newTestSession(t, &Server{
 		Handler: func(s Session) {
@@ -81,6 +81,7 @@ func TestStdout(t *testing.T) {
 }
 
 func TestStderr(t *testing.T) {
+	t.Parallel()
 	testBytes := []byte("Hello world\n")
 	session, cleanup := newTestSession(t, &Server{
 		Handler: func(s Session) {
@@ -99,6 +100,7 @@ func TestStderr(t *testing.T) {
 }
 
 func TestStdin(t *testing.T) {
+	t.Parallel()
 	testBytes := []byte("Hello world\n")
 	session, cleanup := newTestSession(t, &Server{
 		Handler: func(s Session) {
@@ -118,6 +120,7 @@ func TestStdin(t *testing.T) {
 }
 
 func TestUser(t *testing.T) {
+	t.Parallel()
 	testUser := []byte("progrium")
 	session, cleanup := newTestSession(t, &Server{
 		Handler: func(s Session) {
@@ -138,6 +141,7 @@ func TestUser(t *testing.T) {
 }
 
 func TestDefaultExitStatusZero(t *testing.T) {
+	t.Parallel()
 	session, cleanup := newTestSession(t, &Server{
 		Handler: func(s Session) {
 			// noop
@@ -151,6 +155,7 @@ func TestDefaultExitStatusZero(t *testing.T) {
 }
 
 func TestExplicitExitStatusZero(t *testing.T) {
+	t.Parallel()
 	session, cleanup := newTestSession(t, &Server{
 		Handler: func(s Session) {
 			s.Exit(0)
@@ -164,6 +169,7 @@ func TestExplicitExitStatusZero(t *testing.T) {
 }
 
 func TestExitStatusNonZero(t *testing.T) {
+	t.Parallel()
 	session, cleanup := newTestSession(t, &Server{
 		Handler: func(s Session) {
 			s.Exit(1)
@@ -181,6 +187,7 @@ func TestExitStatusNonZero(t *testing.T) {
 }
 
 func TestPty(t *testing.T) {
+	t.Parallel()
 	term := "xterm"
 	winWidth := 40
 	winHeight := 80
@@ -214,6 +221,7 @@ func TestPty(t *testing.T) {
 }
 
 func TestPtyResize(t *testing.T) {
+	t.Parallel()
 	winch0 := Window{40, 80}
 	winch1 := Window{80, 160}
 	winch2 := Window{20, 40}
