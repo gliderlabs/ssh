@@ -46,6 +46,10 @@ var (
 	// The associated value will be of type *Server.
 	ContextKeyServer = &contextKey{"ssh-server"}
 
+	// ContextKeyConn is a context key for use with Contexts in this package.
+	// The associated value will be of type gossh.Conn.
+	ContextKeyConn = &contextKey{"ssh-conn"}
+
 	// ContextKeyPublicKey is a context key for use with Contexts in this package.
 	// The associated value will be of type PublicKey.
 	ContextKeyPublicKey = &contextKey{"public-key"}

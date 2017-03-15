@@ -60,6 +60,22 @@ type Session interface {
 	// TODO: Signals(c chan<- Signal)
 }
 
+func sessionHandler(srv *Server, conn *gossh.ServerConn, newChan gossh.NewChannel, ctx *sshContext) {
+	ch, reqs, err := newChan.Accept()
+	if err != nil {
+		// TODO: trigger event callback
+		return
+	}
+	sess := &session{
+		Channel: ch,
+		conn:    conn,
+		handler: srv.Handler,
+		ptyCb:   srv.PtyCallback,
+		ctx:     ctx,
+	}
+	sess.handleRequests(reqs)
+}
+
 type session struct {
 	gossh.Channel
 	conn    *gossh.ServerConn
@@ -205,6 +221,12 @@ func (sess *session) handleRequests(reqs <-chan *gossh.Request) {
 				sess.winch <- win
 			}
 			req.Reply(ok, nil)
+		case agentRequestType:
+			// TODO: option/callback to allow agent forwarding
+			setAgentRequested(sess)
+			req.Reply(true, nil)
+		default:
+			// TODO: debug log
 		}
 	}
 }
