@@ -44,7 +44,7 @@ func ForwardAgentConnections(l net.Listener, s Session) {
 		if err != nil {
 			return
 		}
-		go func() {
+		go func(conn net.Conn) {
 			defer conn.Close()
 			channel, reqs, err := sshConn.OpenChannel(agentChannelType, nil)
 			if err != nil {
@@ -65,6 +65,6 @@ func ForwardAgentConnections(l net.Listener, s Session) {
 				wg.Done()
 			}()
 			wg.Wait()
-		}()
+		}(conn)
 	}
 }
