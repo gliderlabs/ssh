@@ -9,25 +9,28 @@ building SSH servers. The goal of the API was to make it as simple as using
 
 ```
  package main
- 
+
  import (
      "github.com/gliderlabs/ssh"
      "io"
      "log"
  )
- 
+
  func main() {
      ssh.Handle(func(s ssh.Session) {
          io.WriteString(s, "Hello world\n")
      })  
- 
+
      log.Fatal(ssh.ListenAndServe(":2222", nil))
  }
 
 ```
 
-This package was built after working on nearly a dozen projects using SSH and
-collaborating with [@shazow](https://twitter.com/shazow) (known for [ssh-chat](https://github.com/shazow/ssh-chat)).
+This package was built after working on nearly a dozen projects at Glider Labs using SSH and collaborating with [@shazow](https://twitter.com/shazow) (known for [ssh-chat](https://github.com/shazow/ssh-chat)).
+
+## Examples
+
+A bunch of great examples are in the `_example` directory.
 
 ## Usage
 
