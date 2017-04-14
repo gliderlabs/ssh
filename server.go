@@ -20,7 +20,12 @@ type Server struct {
 	PasswordHandler  PasswordHandler  // password authentication handler
 	PublicKeyHandler PublicKeyHandler // public key authentication handler
 	PtyCallback      PtyCallback      // callback for allowing PTY sessions, allows all if nil
+
+	channelHandlers map[string]channelHandler
 }
+
+// internal for now
+type channelHandler func(srv *Server, conn *gossh.ServerConn, newChan gossh.NewChannel, ctx *sshContext)
 
 func (srv *Server) ensureHostSigner() error {
 	if len(srv.HostSigners) == 0 {
@@ -34,6 +39,9 @@ func (srv *Server) ensureHostSigner() error {
 }
 
 func (srv *Server) config(ctx *sshContext) *gossh.ServerConfig {
+	srv.channelHandlers = map[string]channelHandler{
+		"session": sessionHandler,
+	}
 	config := &gossh.ServerConfig{}
 	for _, signer := range srv.HostSigners {
 		config.AddHostKey(signer)
@@ -114,36 +122,17 @@ func (srv *Server) handleConn(conn net.Conn) {
 		// TODO: trigger event callback
 		return
 	}
+	ctx.SetValue(ContextKeyConn, sshConn)
 	ctx.applyConnMetadata(sshConn)
 	go gossh.DiscardRequests(reqs)
 	for ch := range chans {
-		if ch.ChannelType() != "session" {
+		handler, found := srv.channelHandlers[ch.ChannelType()]
+		if !found {
 			ch.Reject(gossh.UnknownChannelType, "unsupported channel type")
 			continue
 		}
-		go srv.handleChannel(sshConn, ch, ctx)
+		go handler(srv, sshConn, ch, ctx)
 	}
-}
-
-func (srv *Server) handleChannel(conn *gossh.ServerConn, newChan gossh.NewChannel, ctx *sshContext) {
-	ch, reqs, err := newChan.Accept()
-	if err != nil {
-		// TODO: trigger event callback
-		return
-	}
-	sess := srv.newSession(conn, ch, ctx)
-	sess.handleRequests(reqs)
-}
-
-func (srv *Server) newSession(conn *gossh.ServerConn, ch gossh.Channel, ctx *sshContext) *session {
-	sess := &session{
-		Channel: ch,
-		conn:    conn,
-		handler: srv.Handler,
-		ptyCb:   srv.PtyCallback,
-		ctx:     ctx,
-	}
-	return sess
 }
 
 // ListenAndServe listens on the TCP network address srv.Addr and then calls

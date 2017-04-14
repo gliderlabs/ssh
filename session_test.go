@@ -41,6 +41,9 @@ func newClientSession(t *testing.T, addr string, config *gossh.ClientConfig) (*g
 			},
 		}
 	}
+	if config.HostKeyCallback == nil {
+		config.HostKeyCallback = gossh.InsecureIgnoreHostKey()
+	}
 	client, err := gossh.Dial("tcp", addr, config)
 	if err != nil {
 		t.Fatal(err)

@@ -29,6 +29,7 @@ func TestPasswordAuth(t *testing.T) {
 		Auth: []gossh.AuthMethod{
 			gossh.Password(testPass),
 		},
+		HostKeyCallback: gossh.InsecureIgnoreHostKey(),
 	}, PasswordAuth(func(ctx Context, password string) bool {
 		if ctx.User() != testUser {
 			t.Fatalf("user = %#v; want %#v", ctx.User(), testUser)
@@ -57,6 +58,7 @@ func TestPasswordAuthBadPass(t *testing.T) {
 		Auth: []gossh.AuthMethod{
 			gossh.Password("testpass"),
 		},
+		HostKeyCallback: gossh.InsecureIgnoreHostKey(),
 	})
 	if err != nil {
 		if !strings.Contains(err.Error(), "unable to authenticate") {
