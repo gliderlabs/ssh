@@ -1,6 +1,7 @@
 package ssh
 
 import (
+	"net"
 	"strings"
 	"testing"
 
@@ -64,5 +65,43 @@ func TestPasswordAuthBadPass(t *testing.T) {
 		if !strings.Contains(err.Error(), "unable to authenticate") {
 			t.Fatal(err)
 		}
+	}
+}
+
+type wrappedConn struct {
+	net.Conn
+	written *bool
+}
+
+func (c *wrappedConn) Write(p []byte) (n int, err error) {
+	n, err = c.Conn.Write(p)
+	*c.written = true
+	return
+}
+
+func TestConnWrapping(t *testing.T) {
+	t.Parallel()
+	written := false
+	session, cleanup := newTestSessionWithOptions(t, &Server{
+		Handler: func(s Session) {
+			// nothing
+		},
+	}, &gossh.ClientConfig{
+		User: "testuser",
+		Auth: []gossh.AuthMethod{
+			gossh.Password("testpass"),
+		},
+		HostKeyCallback: gossh.InsecureIgnoreHostKey(),
+	}, PasswordAuth(func(ctx Context, password string) bool {
+		return true
+	}), WrapConn(func(conn net.Conn) net.Conn {
+		return &wrappedConn{conn, &written}
+	}))
+	defer cleanup()
+	if err := session.Shell(); err != nil {
+		t.Fatal(err)
+	}
+	if !written {
+		t.Fatal("wrapped conn not written to")
 	}
 }
