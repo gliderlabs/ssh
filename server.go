@@ -13,7 +13,7 @@ import (
 
 // ErrServerClosed is returned by the Server's Serve, ListenAndServe,
 // and ListenAndServeTLS methods after a call to Shutdown or Close.
-var ErrServerClosed = errors.New("http: Server closed")
+var ErrServerClosed = errors.New("ssh: Server closed")
 
 // Server defines parameters for running an SSH server. The zero value for
 // Server is a valid configuration. When both PasswordHandler and
