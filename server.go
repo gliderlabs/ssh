@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	gossh "golang.org/x/crypto/ssh"
@@ -31,11 +30,10 @@ type Server struct {
 
 	channelHandlers map[string]channelHandler
 
-	mu         sync.Mutex
-	inShutdown int32 // accessed atomically (non-zero means we're in Shutdown)
-	listeners  map[net.Listener]struct{}
-	activeConn map[*gossh.ServerConn]struct{}
-	doneChan   chan struct{}
+	mu        sync.Mutex
+	listeners map[net.Listener]struct{}
+	conns     map[*gossh.ServerConn]struct{}
+	doneChan  chan struct{}
 }
 
 // internal for now
@@ -103,9 +101,9 @@ func (srv *Server) Close() error {
 	defer srv.mu.Unlock()
 	srv.closeDoneChanLocked()
 	err := srv.closeListenersLocked()
-	for c := range srv.activeConn {
+	for c := range srv.conns {
 		c.Close()
-		delete(srv.activeConn, c)
+		delete(srv.conns, c)
 	}
 	return err
 }
@@ -125,8 +123,6 @@ var shutdownPollInterval = 500 * time.Millisecond
 // If the provided context expires before the shutdown is complete,
 // then the context's error is returned.
 func (srv *Server) Shutdown(ctx context.Context) error {
-	atomic.AddInt32(&srv.inShutdown, 1)
-	defer atomic.AddInt32(&srv.inShutdown, -1)
 	srv.mu.Lock()
 	lnerr := srv.closeListenersLocked()
 	srv.closeDoneChanLocked()
@@ -134,11 +130,10 @@ func (srv *Server) Shutdown(ctx context.Context) error {
 	ticker := time.NewTicker(shutdownPollInterval)
 	defer ticker.Stop()
 	for {
-
 		srv.mu.Lock()
-		activeConns := len(srv.activeConn)
+		conns := len(srv.conns)
 		srv.mu.Unlock()
-		if activeConns == 0 {
+		if conns == 0 {
 			return lnerr
 		}
 		select {
@@ -148,10 +143,6 @@ func (srv *Server) Shutdown(ctx context.Context) error {
 		}
 	}
 
-}
-
-func (s *Server) shuttingDown() bool {
-	return atomic.LoadInt32(&s.inShutdown) != 0
 }
 
 // Serve accepts incoming connections on the Listener l, creating a new
@@ -296,7 +287,7 @@ func (srv *Server) trackListener(ln net.Listener, add bool) {
 	if add {
 		// If the *Server is being reused after a previous
 		// Close or Shutdown, reset its doneChan:
-		if len(srv.listeners) == 0 && len(srv.activeConn) == 0 {
+		if len(srv.listeners) == 0 && len(srv.conns) == 0 {
 			srv.doneChan = nil
 		}
 		srv.listeners[ln] = struct{}{}
@@ -308,12 +299,12 @@ func (srv *Server) trackListener(ln net.Listener, add bool) {
 func (srv *Server) trackConn(c *gossh.ServerConn, add bool) {
 	srv.mu.Lock()
 	defer srv.mu.Unlock()
-	if srv.activeConn == nil {
-		srv.activeConn = make(map[*gossh.ServerConn]struct{})
+	if srv.conns == nil {
+		srv.conns = make(map[*gossh.ServerConn]struct{})
 	}
 	if add {
-		srv.activeConn[c] = struct{}{}
+		srv.conns[c] = struct{}{}
 	} else {
-		delete(srv.activeConn, c)
+		delete(srv.conns, c)
 	}
 }
