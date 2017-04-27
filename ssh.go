@@ -42,6 +42,9 @@ type PasswordHandler func(ctx Context, password string) bool
 // PtyCallback is a hook for allowing PTY sessions.
 type PtyCallback func(ctx Context, pty Pty) bool
 
+// LocalPortForwardingCallback is a hook for allowing port forwarding
+type LocalPortForwardingCallback func(ctx Context, destinationHost string, destinationPort uint32) bool
+
 // Window represents the size of a PTY window.
 type Window struct {
 	Width  int

@@ -17,9 +17,10 @@ type Server struct {
 	HostSigners []Signer // private keys for the host key, must have at least one
 	Version     string   // server version to be sent before the initial handshake
 
-	PasswordHandler  PasswordHandler  // password authentication handler
-	PublicKeyHandler PublicKeyHandler // public key authentication handler
-	PtyCallback      PtyCallback      // callback for allowing PTY sessions, allows all if nil
+	PasswordHandler             PasswordHandler             // password authentication handler
+	PublicKeyHandler            PublicKeyHandler            // public key authentication handler
+	PtyCallback                 PtyCallback                 // callback for allowing PTY sessions, allows all if nil
+	LocalPortForwardingCallback LocalPortForwardingCallback // callback for allowing local port forwarding, denies all if nil
 
 	channelHandlers map[string]channelHandler
 }
@@ -40,7 +41,8 @@ func (srv *Server) ensureHostSigner() error {
 
 func (srv *Server) config(ctx *sshContext) *gossh.ServerConfig {
 	srv.channelHandlers = map[string]channelHandler{
-		"session": sessionHandler,
+		"session":      sessionHandler,
+		"direct-tcpip": directTcpipHandler,
 	}
 	config := &gossh.ServerConfig{}
 	for _, signer := range srv.HostSigners {
