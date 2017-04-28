@@ -7,7 +7,7 @@ import (
 	gossh "golang.org/x/crypto/ssh"
 )
 
-func newTestSessionWithOptions(t *testing.T, srv *Server, cfg *gossh.ClientConfig, options ...Option) (*gossh.Session, func()) {
+func newTestSessionWithOptions(t *testing.T, srv *Server, cfg *gossh.ClientConfig, options ...Option) (*gossh.Session, *gossh.Client, func()) {
 	for _, option := range options {
 		if err := srv.SetOption(option); err != nil {
 			t.Fatal(err)
@@ -20,7 +20,7 @@ func TestPasswordAuth(t *testing.T) {
 	t.Parallel()
 	testUser := "testuser"
 	testPass := "testpass"
-	session, cleanup := newTestSessionWithOptions(t, &Server{
+	session, _, cleanup := newTestSessionWithOptions(t, &Server{
 		Handler: func(s Session) {
 			// noop
 		},

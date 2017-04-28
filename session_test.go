@@ -32,7 +32,7 @@ func newLocalListener() net.Listener {
 	return l
 }
 
-func newClientSession(t *testing.T, addr string, config *gossh.ClientConfig) (*gossh.Session, func()) {
+func newClientSession(t *testing.T, addr string, config *gossh.ClientConfig) (*gossh.Session, *gossh.Client, func()) {
 	if config == nil {
 		config = &gossh.ClientConfig{
 			User: "testuser",
@@ -52,13 +52,13 @@ func newClientSession(t *testing.T, addr string, config *gossh.ClientConfig) (*g
 	if err != nil {
 		t.Fatal(err)
 	}
-	return session, func() {
+	return session, client, func() {
 		session.Close()
 		client.Close()
 	}
 }
 
-func newTestSession(t *testing.T, srv *Server, cfg *gossh.ClientConfig) (*gossh.Session, func()) {
+func newTestSession(t *testing.T, srv *Server, cfg *gossh.ClientConfig) (*gossh.Session, *gossh.Client, func()) {
 	l := newLocalListener()
 	go srv.serveOnce(l)
 	return newClientSession(t, l.Addr().String(), cfg)
@@ -67,7 +67,7 @@ func newTestSession(t *testing.T, srv *Server, cfg *gossh.ClientConfig) (*gossh.
 func TestStdout(t *testing.T) {
 	t.Parallel()
 	testBytes := []byte("Hello world\n")
-	session, cleanup := newTestSession(t, &Server{
+	session, _, cleanup := newTestSession(t, &Server{
 		Handler: func(s Session) {
 			s.Write(testBytes)
 		},
@@ -86,7 +86,7 @@ func TestStdout(t *testing.T) {
 func TestStderr(t *testing.T) {
 	t.Parallel()
 	testBytes := []byte("Hello world\n")
-	session, cleanup := newTestSession(t, &Server{
+	session, _, cleanup := newTestSession(t, &Server{
 		Handler: func(s Session) {
 			s.Stderr().Write(testBytes)
 		},
@@ -105,7 +105,7 @@ func TestStderr(t *testing.T) {
 func TestStdin(t *testing.T) {
 	t.Parallel()
 	testBytes := []byte("Hello world\n")
-	session, cleanup := newTestSession(t, &Server{
+	session, _, cleanup := newTestSession(t, &Server{
 		Handler: func(s Session) {
 			io.Copy(s, s) // stdin back into stdout
 		},
@@ -125,7 +125,7 @@ func TestStdin(t *testing.T) {
 func TestUser(t *testing.T) {
 	t.Parallel()
 	testUser := []byte("progrium")
-	session, cleanup := newTestSession(t, &Server{
+	session, _, cleanup := newTestSession(t, &Server{
 		Handler: func(s Session) {
 			io.WriteString(s, s.User())
 		},
@@ -145,7 +145,7 @@ func TestUser(t *testing.T) {
 
 func TestDefaultExitStatusZero(t *testing.T) {
 	t.Parallel()
-	session, cleanup := newTestSession(t, &Server{
+	session, _, cleanup := newTestSession(t, &Server{
 		Handler: func(s Session) {
 			// noop
 		},
@@ -159,7 +159,7 @@ func TestDefaultExitStatusZero(t *testing.T) {
 
 func TestExplicitExitStatusZero(t *testing.T) {
 	t.Parallel()
-	session, cleanup := newTestSession(t, &Server{
+	session, _, cleanup := newTestSession(t, &Server{
 		Handler: func(s Session) {
 			s.Exit(0)
 		},
@@ -173,7 +173,7 @@ func TestExplicitExitStatusZero(t *testing.T) {
 
 func TestExitStatusNonZero(t *testing.T) {
 	t.Parallel()
-	session, cleanup := newTestSession(t, &Server{
+	session, _, cleanup := newTestSession(t, &Server{
 		Handler: func(s Session) {
 			s.Exit(1)
 		},
@@ -195,7 +195,7 @@ func TestPty(t *testing.T) {
 	winWidth := 40
 	winHeight := 80
 	done := make(chan bool)
-	session, cleanup := newTestSession(t, &Server{
+	session, _, cleanup := newTestSession(t, &Server{
 		Handler: func(s Session) {
 			ptyReq, _, isPty := s.Pty()
 			if !isPty {
@@ -230,7 +230,7 @@ func TestPtyResize(t *testing.T) {
 	winch2 := Window{20, 40}
 	winches := make(chan Window)
 	done := make(chan bool)
-	session, cleanup := newTestSession(t, &Server{
+	session, _, cleanup := newTestSession(t, &Server{
 		Handler: func(s Session) {
 			ptyReq, winCh, isPty := s.Pty()
 			if !isPty {
