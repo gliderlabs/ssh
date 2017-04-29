@@ -1,3 +1,10 @@
-test:
-  override:
-    - go test -v -race
+version: 2.0
+jobs:
+  build:
+    docker:
+    - image: golang:1.8
+    working_directory: /go/src/github.com/gliderlabs/ssh
+    steps:
+    - checkout
+    - run: go get
+    - run: go test -v -race
