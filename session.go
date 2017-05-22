@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"sync"
 
 	"github.com/anmitsu/go-shlex"
 	gossh "golang.org/x/crypto/ssh"
@@ -57,7 +58,8 @@ type Session interface {
 	// of whether or not a PTY was accepted for this session.
 	Pty() (Pty, <-chan Window, bool)
 
-	// TODO: Signals(c chan<- Signal)
+	// Signals returns a SingalChan to handle clients' signals
+	Signals() SignalChan
 }
 
 func sessionHandler(srv *Server, conn *gossh.ServerConn, newChan gossh.NewChannel, ctx *sshContext) {
@@ -73,6 +75,9 @@ func sessionHandler(srv *Server, conn *gossh.ServerConn, newChan gossh.NewChanne
 		ptyCb:   srv.PtyCallback,
 		ctx:     ctx,
 	}
+
+	// create empty signal stream
+	sess.signal.stream = newSignals("")
 	sess.handleRequests(reqs)
 }
 
@@ -88,6 +93,11 @@ type session struct {
 	ptyCb   PtyCallback
 	cmd     []string
 	ctx     *sshContext
+
+	signal struct {
+		sync.RWMutex
+		stream *signals
+	}
 }
 
 func (sess *session) Write(p []byte) (n int, err error) {
@@ -158,6 +168,12 @@ func (sess *session) Pty() (Pty, <-chan Window, bool) {
 	return Pty{}, sess.winch, false
 }
 
+func (sess *session) Signals() SignalChan {
+	sess.signal.RLock()
+	defer sess.signal.RUnlock()
+	return sess.signal.stream.fork()
+}
+
 func (sess *session) handleRequests(reqs <-chan *gossh.Request) {
 	for req := range reqs {
 		switch req.Type {
@@ -225,8 +241,56 @@ func (sess *session) handleRequests(reqs <-chan *gossh.Request) {
 			// TODO: option/callback to allow agent forwarding
 			setAgentRequested(sess)
 			req.Reply(true, nil)
+		case "signal":
+			var payload struct{ Signal string }
+			gossh.Unmarshal(req.Payload, &payload)
+			sess.signal.Lock()
+			// always point to the latest signal
+			sess.signal.stream = sess.signal.stream.update(Signal(payload.Signal))
+			sess.signal.Unlock()
 		default:
 			// TODO: debug log
 		}
 	}
+}
+
+// signals a observable signal stream, not thread safe
+type signals struct {
+	c chan struct{}
+	s Signal
+
+	next *signals
+}
+
+type sigChan struct {
+	sig *signals
+}
+
+func newSignals(sig Signal) *signals {
+	return &signals{
+		c: make(chan struct{}),
+		s: sig,
+	}
+}
+
+func (s *signals) fork() *sigChan {
+	return &sigChan{
+		sig: s,
+	}
+}
+
+func (s *signals) update(sig Signal) *signals {
+	s.next = newSignals(sig)
+	close(s.c)
+	return s.next
+}
+
+func (sc *sigChan) C() <-chan struct{} {
+	return sc.sig.c
+}
+
+func (sc *sigChan) Next() Signal {
+	<-sc.sig.c
+	sc.sig = sc.sig.next
+	return sc.sig.s
 }
