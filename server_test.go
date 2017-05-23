@@ -24,7 +24,7 @@ func TestServerShutdown(t *testing.T) {
 		}
 	}()
 	sessDone := make(chan struct{})
-	sess, cleanup := newClientSession(t, l.Addr().String(), nil)
+	sess, _, cleanup := newClientSession(t, l.Addr().String(), nil)
 	go func() {
 		defer cleanup()
 		defer close(sessDone)
@@ -74,7 +74,7 @@ func TestServerClose(t *testing.T) {
 	}()
 
 	doneCh := make(chan struct{})
-	sess, cleanup := newClientSession(t, l.Addr().String(), nil)
+	sess, _, cleanup := newClientSession(t, l.Addr().String(), nil)
 	go func() {
 		defer cleanup()
 		defer close(doneCh)
