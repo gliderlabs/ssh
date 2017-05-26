@@ -280,3 +280,39 @@ func TestPtyResize(t *testing.T) {
 	session.Close()
 	<-done
 }
+
+func TestSignal(t *testing.T) {
+	t.Parallel()
+
+	session, _, cleanup := newTestSession(t, &Server{
+		Handler: func(s Session) {
+			sigC := s.Signals()
+			<-sigC.C()
+			if sig := sigC.Next(); sig != SIGINT {
+				t.Fatalf("expected signal %v but got %v", SIGINT, sig)
+			}
+			// multi task
+			exitC := make(chan struct{})
+			go func(sc SignalChan) {
+				// block and wait SIGKILL
+				if sig := sigC.Next(); sig == SIGKILL {
+					close(exitC)
+				}
+
+			}(s.Signals())
+
+			<-exitC
+		},
+	}, nil)
+	defer cleanup()
+
+	go func() {
+		session.Signal(gossh.SIGINT)
+		session.Signal(gossh.SIGKILL)
+	}()
+
+	err := session.Run("")
+	if err != nil {
+		t.Fatalf("expected nil but got %v", err)
+	}
+}

@@ -24,6 +24,17 @@ const (
 	SIGUSR2 Signal = "USR2"
 )
 
+// SignalChan to receive client's signal(s)
+type SignalChan interface {
+	// C returns a channel to wait signals
+	// Using Next() to get the received signal, for example:
+	//	<-sc.C()
+	//	sig := sc.Next()
+	C() <-chan struct{}
+	// Next blocks and waits new signal
+	Next() Signal
+}
+
 // DefaultHandler is the default Handler used by Serve.
 var DefaultHandler Handler
 
