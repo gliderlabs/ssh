@@ -107,7 +107,11 @@ func (sess *session) Write(p []byte) (n int, err error) {
 }
 
 func (sess *session) PublicKey() PublicKey {
-	return sess.ctx.Value(ContextKeyPublicKey).(PublicKey)
+	sessionkey := sess.ctx.Value(ContextKeyPublicKey)
+	if sessionkey == nil {
+		return nil
+	}
+	return sessionkey.(PublicKey)
 }
 
 func (sess *session) Permissions() Permissions {

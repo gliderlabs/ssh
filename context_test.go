@@ -7,7 +7,7 @@ func TestSetPermissions(t *testing.T) {
 	permsExt := map[string]string{
 		"foo": "bar",
 	}
-	session, cleanup := newTestSessionWithOptions(t, &Server{
+	session, _, cleanup := newTestSessionWithOptions(t, &Server{
 		Handler: func(s Session) {
 			if _, ok := s.Permissions().Extensions["foo"]; !ok {
 				t.Fatalf("got %#v; want %#v", s.Permissions().Extensions, permsExt)
@@ -29,7 +29,7 @@ func TestSetValue(t *testing.T) {
 		"foo": "bar",
 	}
 	key := "testValue"
-	session, cleanup := newTestSessionWithOptions(t, &Server{
+	session, _, cleanup := newTestSessionWithOptions(t, &Server{
 		Handler: func(s Session) {
 			v := s.Context().Value(key).(map[string]string)
 			if v["foo"] != value["foo"] {
