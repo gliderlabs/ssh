@@ -82,7 +82,7 @@ func (c *wrappedConn) Write(p []byte) (n int, err error) {
 func TestConnWrapping(t *testing.T) {
 	t.Parallel()
 	written := false
-	session, cleanup := newTestSessionWithOptions(t, &Server{
+	session, _, cleanup := newTestSessionWithOptions(t, &Server{
 		Handler: func(s Session) {
 			// nothing
 		},
