@@ -1,7 +1,9 @@
 package ssh
 
 import (
+	"net"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	gossh "golang.org/x/crypto/ssh"
@@ -64,5 +66,44 @@ func TestPasswordAuthBadPass(t *testing.T) {
 		if !strings.Contains(err.Error(), "unable to authenticate") {
 			t.Fatal(err)
 		}
+	}
+}
+
+type wrappedConn struct {
+	net.Conn
+	written int32
+}
+
+func (c *wrappedConn) Write(p []byte) (n int, err error) {
+	n, err = c.Conn.Write(p)
+	atomic.AddInt32(&(c.written), int32(n))
+	return
+}
+
+func TestConnWrapping(t *testing.T) {
+	t.Parallel()
+	var wrapped *wrappedConn
+	session, _, cleanup := newTestSessionWithOptions(t, &Server{
+		Handler: func(s Session) {
+			// nothing
+		},
+	}, &gossh.ClientConfig{
+		User: "testuser",
+		Auth: []gossh.AuthMethod{
+			gossh.Password("testpass"),
+		},
+		HostKeyCallback: gossh.InsecureIgnoreHostKey(),
+	}, PasswordAuth(func(ctx Context, password string) bool {
+		return true
+	}), WrapConn(func(conn net.Conn) net.Conn {
+		wrapped = &wrappedConn{conn, 0}
+		return wrapped
+	}))
+	defer cleanup()
+	if err := session.Shell(); err != nil {
+		t.Fatal(err)
+	}
+	if atomic.LoadInt32(&(wrapped.written)) == 0 {
+		t.Fatal("wrapped conn not written to")
 	}
 }

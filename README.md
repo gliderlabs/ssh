@@ -30,7 +30,7 @@ This package was built after working on nearly a dozen projects at Glider Labs u
 
 ## Examples
 
-A bunch of great examples are in the `_example` directory.
+A bunch of great examples are in the `_examples` directory.
 
 ## Usage
 

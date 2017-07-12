@@ -42,6 +42,11 @@ type PasswordHandler func(ctx Context, password string) bool
 // PtyCallback is a hook for allowing PTY sessions.
 type PtyCallback func(ctx Context, pty Pty) bool
 
+// ConnCallback is a hook for new connections before handling.
+// It allows wrapping for timeouts and limiting by returning
+// the net.Conn that will be used as the underlying connection.
+type ConnCallback func(conn net.Conn) net.Conn
+
 // LocalPortForwardingCallback is a hook for allowing port forwarding
 type LocalPortForwardingCallback func(ctx Context, destinationHost string, destinationPort uint32) bool
 

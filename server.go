@@ -27,6 +27,7 @@ type Server struct {
 	PasswordHandler             PasswordHandler             // password authentication handler
 	PublicKeyHandler            PublicKeyHandler            // public key authentication handler
 	PtyCallback                 PtyCallback                 // callback for allowing PTY sessions, allows all if nil
+	ConnCallback                ConnCallback                // optional callback for wrapping net.Conn before handling
 	LocalPortForwardingCallback LocalPortForwardingCallback // callback for allowing local port forwarding, denies all if nil
 
 	channelHandlers map[string]channelHandler
@@ -191,6 +192,14 @@ func (srv *Server) Serve(l net.Listener) error {
 }
 
 func (srv *Server) handleConn(conn net.Conn) {
+	if srv.ConnCallback != nil {
+		cbConn := srv.ConnCallback(conn)
+		if cbConn == nil {
+			conn.Close()
+			return
+		}
+		conn = cbConn
+	}
 	defer conn.Close()
 	ctx := newContext(srv)
 	sshConn, chans, reqs, err := gossh.NewServerConn(conn, srv.config(ctx))

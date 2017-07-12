@@ -62,3 +62,11 @@ func NoPty() Option {
 		return nil
 	}
 }
+
+// WrapConn returns a functional option that sets ConnCallback on the server.
+func WrapConn(fn ConnCallback) Option {
+	return func(srv *Server) error {
+		srv.ConnCallback = fn
+		return nil
+	}
+}
