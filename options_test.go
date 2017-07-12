@@ -3,6 +3,7 @@ package ssh
 import (
 	"net"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	gossh "golang.org/x/crypto/ssh"
@@ -70,18 +71,18 @@ func TestPasswordAuthBadPass(t *testing.T) {
 
 type wrappedConn struct {
 	net.Conn
-	written *bool
+	written int32
 }
 
 func (c *wrappedConn) Write(p []byte) (n int, err error) {
 	n, err = c.Conn.Write(p)
-	*c.written = true
+	atomic.AddInt32(&(c.written), int32(n))
 	return
 }
 
 func TestConnWrapping(t *testing.T) {
 	t.Parallel()
-	written := false
+	var wrapped *wrappedConn
 	session, _, cleanup := newTestSessionWithOptions(t, &Server{
 		Handler: func(s Session) {
 			// nothing
@@ -95,13 +96,14 @@ func TestConnWrapping(t *testing.T) {
 	}, PasswordAuth(func(ctx Context, password string) bool {
 		return true
 	}), WrapConn(func(conn net.Conn) net.Conn {
-		return &wrappedConn{conn, &written}
+		wrapped = &wrappedConn{conn, 0}
+		return wrapped
 	}))
 	defer cleanup()
 	if err := session.Shell(); err != nil {
 		t.Fatal(err)
 	}
-	if !written {
+	if atomic.LoadInt32(&(wrapped.written)) == 0 {
 		t.Fatal("wrapped conn not written to")
 	}
 }
