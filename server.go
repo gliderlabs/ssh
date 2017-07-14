@@ -30,6 +30,9 @@ type Server struct {
 	ConnCallback                ConnCallback                // optional callback for wrapping net.Conn before handling
 	LocalPortForwardingCallback LocalPortForwardingCallback // callback for allowing local port forwarding, denies all if nil
 
+	IdleTimeout time.Duration // connection timeout when no activity, none if empty
+	MaxTimeout  time.Duration // absolute connection timeout, none if empty
+
 	channelHandlers map[string]channelHandler
 
 	mu        sync.Mutex
@@ -191,17 +194,25 @@ func (srv *Server) Serve(l net.Listener) error {
 	}
 }
 
-func (srv *Server) handleConn(conn net.Conn) {
+func (srv *Server) handleConn(newConn net.Conn) {
 	if srv.ConnCallback != nil {
-		cbConn := srv.ConnCallback(conn)
+		cbConn := srv.ConnCallback(newConn)
 		if cbConn == nil {
-			conn.Close()
+			newConn.Close()
 			return
 		}
-		conn = cbConn
+		newConn = cbConn
+	}
+	ctx, cancel := newContext(srv)
+	conn := &serverConn{
+		Conn:          newConn,
+		idleTimeout:   srv.IdleTimeout,
+		closeCanceler: cancel,
+	}
+	if int64(srv.MaxTimeout) > 0 {
+		conn.maxDeadline = time.Now().Add(srv.MaxTimeout)
 	}
 	defer conn.Close()
-	ctx := newContext(srv)
 	sshConn, chans, reqs, err := gossh.NewServerConn(conn, srv.config(ctx))
 	if err != nil {
 		// TODO: trigger event callback
