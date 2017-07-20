@@ -28,6 +28,9 @@ type Session interface {
 	// RemoteAddr returns the net.Addr of the client side of the connection.
 	RemoteAddr() net.Addr
 
+	// LocalAddr returns the net.Addr of the server side of the connection.
+	LocalAddr() net.Addr
+
 	// Environ returns a copy of strings representing the environment set by the
 	// user for this session, in the form "key=value".
 	Environ() []string
@@ -145,6 +148,10 @@ func (sess *session) User() string {
 
 func (sess *session) RemoteAddr() net.Addr {
 	return sess.conn.RemoteAddr()
+}
+
+func (sess *session) LocalAddr() net.Addr {
+	return sess.conn.LocalAddr()
 }
 
 func (sess *session) Environ() []string {
