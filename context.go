@@ -2,8 +2,8 @@ package ssh
 
 import (
 	"context"
-	"net"
 	"encoding/hex"
+	"net"
 
 	gossh "golang.org/x/crypto/ssh"
 )
@@ -92,12 +92,13 @@ type sshContext struct {
 	context.Context
 }
 
-func newContext(srv *Server) *sshContext {
-	ctx := &sshContext{context.Background()}
+func newContext(srv *Server) (*sshContext, context.CancelFunc) {
+	innerCtx, cancel := context.WithCancel(context.Background())
+	ctx := &sshContext{innerCtx}
 	ctx.SetValue(ContextKeyServer, srv)
 	perms := &Permissions{&gossh.Permissions{}}
 	ctx.SetValue(ContextKeyPermissions, perms)
-	return ctx
+	return ctx, cancel
 }
 
 // this is separate from newContext because we will get ConnMetadata
