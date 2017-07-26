@@ -7,6 +7,8 @@
 [![Slack](http://slack.gliderlabs.com/badge.svg)](http://slack.gliderlabs.com) 
 [![Email Updates](https://img.shields.io/badge/updates-subscribe-yellow.svg)](https://app.convertkit.com/landing_pages/243312)
 
+> This package is dope. It's always refreshing to see nice API design.  &mdash;[@bradfitz](https://twitter.com/bradfitz), Go team member
+
 This Go package wraps the [crypto/ssh
 package](https://godoc.org/golang.org/x/crypto/ssh) with a higher-level API for
 building SSH servers. The goal of the API was to make it as simple as using
@@ -30,8 +32,6 @@ building SSH servers. The goal of the API was to make it as simple as using
  }
 
 ```
-> This package is dope. It's always refreshing to see nice API design.  &mdash;[@bradfitz](https://twitter.com/bradfitz), Go team member
-
 This package was built by [@progrium](https://twitter.com/progrium) after working on nearly a dozen projects at Glider Labs using SSH and collaborating with [@shazow](https://twitter.com/shazow) (known for [ssh-chat](https://github.com/shazow/ssh-chat)).
 
 ## Examples
