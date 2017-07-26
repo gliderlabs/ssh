@@ -1,6 +1,10 @@
 # gliderlabs/ssh
 
-[![Slack](http://slack.gliderlabs.com/badge.svg)](http://slack.gliderlabs.com) [![GoDoc](https://godoc.org/github.com/gliderlabs/ssh?status.svg)](https://godoc.org/github.com/gliderlabs/ssh) [![Go Report Card](https://goreportcard.com/badge/github.com/gliderlabs/ssh)](https://goreportcard.com/report/github.com/gliderlabs/ssh) [![OpenCollective](https://opencollective.com/ssh/backers/badge.svg)](#backers) [![OpenCollective](https://opencollective.com/ssh/sponsors/badge.svg)](#sponsors)
+[![Slack](http://slack.gliderlabs.com/badge.svg)](http://slack.gliderlabs.com) 
+[![GoDoc](https://godoc.org/github.com/gliderlabs/ssh?status.svg)](https://godoc.org/github.com/gliderlabs/ssh) 
+[![Go Report Card](https://goreportcard.com/badge/github.com/gliderlabs/ssh)](https://goreportcard.com/report/github.com/gliderlabs/ssh) 
+[![OpenCollective](https://opencollective.com/ssh/sponsors/badge.svg)](#sponsors)
+[![Email Updates](https://img.shields.io/badge/updates-subscribe-yellow.svg)](https://app.convertkit.com/landing_pages/243312)
 
 This Go package wraps the [crypto/ssh
 package](https://godoc.org/golang.org/x/crypto/ssh) with a higher-level API for
