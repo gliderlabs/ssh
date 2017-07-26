@@ -7,7 +7,7 @@
 [![Slack](http://slack.gliderlabs.com/badge.svg)](http://slack.gliderlabs.com) 
 [![Email Updates](https://img.shields.io/badge/updates-subscribe-yellow.svg)](https://app.convertkit.com/landing_pages/243312)
 
-> This package is dope. It's always refreshing to see nice API design.  &mdash;[@bradfitz](https://twitter.com/bradfitz), Go team member
+> The Glider Labs SSH server package is dope.  &mdash;[@bradfitz](https://twitter.com/bradfitz), Go team member
 
 This Go package wraps the [crypto/ssh
 package](https://godoc.org/golang.org/x/crypto/ssh) with a higher-level API for
