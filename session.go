@@ -50,6 +50,9 @@ type Session interface {
 	// Context returns the connection's context. The returned context is always
 	// non-nil and holds the same data as the Context passed into auth
 	// handlers and callbacks.
+	//
+	// The context is canceled when the client's connection closes or I/O
+	// operation fails.
 	Context() context.Context
 
 	// Permissions returns a copy of the Permissions object that was available for
