@@ -209,7 +209,7 @@ func (srv *Server) handleConn(newConn net.Conn) {
 		idleTimeout:   srv.IdleTimeout,
 		closeCanceler: cancel,
 	}
-	if int64(srv.MaxTimeout) > 0 {
+	if srv.MaxTimeout > 0 {
 		conn.maxDeadline = time.Now().Add(srv.MaxTimeout)
 	}
 	defer conn.Close()

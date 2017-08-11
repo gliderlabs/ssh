@@ -41,10 +41,15 @@ func (c *serverConn) Close() (err error) {
 }
 
 func (c *serverConn) updateDeadline() {
-	idleDeadline := time.Now().Add(c.idleTimeout)
-	if idleDeadline.Unix() < c.maxDeadline.Unix() {
-		c.Conn.SetDeadline(idleDeadline)
-	} else {
+	switch {
+	case c.idleTimeout > 0:
+		idleDeadline := time.Now().Add(c.idleTimeout)
+		if idleDeadline.Unix() < c.maxDeadline.Unix() {
+			c.Conn.SetDeadline(idleDeadline)
+			return
+		}
+		fallthrough
+	default:
 		c.Conn.SetDeadline(c.maxDeadline)
 	}
 }
