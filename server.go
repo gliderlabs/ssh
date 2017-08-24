@@ -33,7 +33,8 @@ type Server struct {
 	IdleTimeout time.Duration // connection timeout when no activity, none if empty
 	MaxTimeout  time.Duration // absolute connection timeout, none if empty
 
-	channelHandlers map[string]channelHandler
+	channelHandlers map[string]ChannelHandler
+	requestHandlers map[string]RequestHandler
 
 	mu        sync.Mutex
 	listeners map[net.Listener]struct{}
@@ -41,8 +42,13 @@ type Server struct {
 	doneChan  chan struct{}
 }
 
-// internal for now
-type channelHandler func(srv *Server, conn *gossh.ServerConn, newChan gossh.NewChannel, ctx *sshContext)
+type RequestHandler interface {
+	HandleRequest(ctx *sshContext, req *gossh.Request) (ok bool, payload []byte)
+}
+
+type ChannelHandler interface {
+	HandleChannel(ctx *sshContext, newChan gossh.NewChannel)
+}
 
 func (srv *Server) ensureHostSigner() error {
 	if len(srv.HostSigners) == 0 {
@@ -55,11 +61,21 @@ func (srv *Server) ensureHostSigner() error {
 	return nil
 }
 
-func (srv *Server) config(ctx *sshContext) *gossh.ServerConfig {
-	srv.channelHandlers = map[string]channelHandler{
-		"session":      sessionHandler,
-		"direct-tcpip": directTcpipHandler,
+func (srv *Server) ensureHandlers() {
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+	srv.requestHandlers = map[string]RequestHandler{
+		"tcpip-forward":        forwardedTCPHandler{},
+		"cancel-tcpip-forward": forwardedTCPHandler{},
 	}
+	srv.channelHandlers = map[string]ChannelHandler{
+		"session":         sessionHandler{},
+		"direct-tcpip":    directTCPHandler{},
+		"forwarded-tcpip": forwardedTCPHandler{},
+	}
+}
+
+func (srv *Server) config(ctx *sshContext) *gossh.ServerConfig {
 	config := &gossh.ServerConfig{}
 	for _, signer := range srv.HostSigners {
 		config.AddHostKey(signer)
@@ -157,6 +173,7 @@ func (srv *Server) Shutdown(ctx context.Context) error {
 //
 // Serve always returns a non-nil error.
 func (srv *Server) Serve(l net.Listener) error {
+	srv.ensureHandlers()
 	defer l.Close()
 	if err := srv.ensureHostSigner(); err != nil {
 		return err
@@ -224,14 +241,28 @@ func (srv *Server) handleConn(newConn net.Conn) {
 
 	ctx.SetValue(ContextKeyConn, sshConn)
 	ctx.applyConnMetadata(sshConn)
-	go gossh.DiscardRequests(reqs)
+	go srv.handleRequests(ctx, reqs)
 	for ch := range chans {
 		handler, found := srv.channelHandlers[ch.ChannelType()]
 		if !found {
 			ch.Reject(gossh.UnknownChannelType, "unsupported channel type")
 			continue
 		}
-		go handler(srv, sshConn, ch, ctx)
+		go handler.HandleChannel(ctx, ch)
+	}
+}
+
+func (srv *Server) handleRequests(ctx *sshContext, in <-chan *gossh.Request) {
+	for req := range in {
+		handler, found := srv.requestHandlers[req.Type]
+		if !found && req.WantReply {
+			req.Reply(false, nil)
+			continue
+		}
+		ret, payload := handler.HandleRequest(ctx, req)
+		if req.WantReply {
+			req.Reply(ret, payload)
+		}
 	}
 }
 

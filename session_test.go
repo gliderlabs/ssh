@@ -11,6 +11,7 @@ import (
 )
 
 func (srv *Server) serveOnce(l net.Listener) error {
+	srv.ensureHandlers()
 	if err := srv.ensureHostSigner(); err != nil {
 		return err
 	}

@@ -66,7 +66,11 @@ type Session interface {
 	// TODO: Signals(c chan<- Signal)
 }
 
-func sessionHandler(srv *Server, conn *gossh.ServerConn, newChan gossh.NewChannel, ctx *sshContext) {
+type sessionHandler struct{}
+
+func (_ sessionHandler) HandleChannel(ctx *sshContext, newChan gossh.NewChannel) {
+	srv := ctx.Value(ContextKeyServer).(*Server)
+	conn := ctx.Value(ContextKeyConn).(*gossh.ServerConn)
 	ch, reqs, err := newChan.Accept()
 	if err != nil {
 		// TODO: trigger event callback
