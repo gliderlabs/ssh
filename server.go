@@ -69,9 +69,8 @@ func (srv *Server) ensureHandlers() {
 		"cancel-tcpip-forward": forwardedTCPHandler{},
 	}
 	srv.channelHandlers = map[string]ChannelHandler{
-		"session":         sessionHandler{},
-		"direct-tcpip":    directTCPHandler{},
-		"forwarded-tcpip": forwardedTCPHandler{},
+		"session":      sessionHandler{},
+		"direct-tcpip": directTCPHandler{},
 	}
 }
 
