@@ -28,7 +28,7 @@ func main() {
 			StdinOnce:    true,
 			Volumes:      make(map[string]struct{}),
 		}
-		err, status, cleanup := dockerRun(cfg, sess)
+		status, cleanup, err := dockerRun(cfg, sess)
 		defer cleanup()
 		if err != nil {
 			fmt.Fprintln(sess, err)
@@ -41,7 +41,7 @@ func main() {
 	log.Fatal(ssh.ListenAndServe(":2222", nil))
 }
 
-func dockerRun(cfg *container.Config, sess ssh.Session) (err error, status int64, cleanup func()) {
+func dockerRun(cfg *container.Config, sess ssh.Session) (status int64, cleanup func(), err error) {
 	docker, err := client.NewEnvClient()
 	if err != nil {
 		panic(err)
@@ -70,7 +70,9 @@ func dockerRun(cfg *container.Config, sess ssh.Session) (err error, status int64
 		docker.ContainerRemove(ctx, res.ID, types.ContainerRemoveOptions{})
 		stream.Close()
 	}
+
 	outputErr := make(chan error)
+
 	go func() {
 		var err error
 		if cfg.Tty {
@@ -80,10 +82,12 @@ func dockerRun(cfg *container.Config, sess ssh.Session) (err error, status int64
 		}
 		outputErr <- err
 	}()
+
 	go func() {
 		defer stream.CloseWrite()
 		io.Copy(stream.Conn, sess)
 	}()
+
 	err = docker.ContainerStart(ctx, res.ID, types.ContainerStartOptions{})
 	if err != nil {
 		return
@@ -103,9 +107,12 @@ func dockerRun(cfg *container.Config, sess ssh.Session) (err error, status int64
 			}
 		}()
 	}
-	status, err = docker.ContainerWait(ctx, res.ID)
-	if err != nil {
+	resultC, errC := docker.ContainerWait(ctx, res.ID, container.WaitConditionNotRunning)
+	select {
+	case err = <-errC:
 		return
+	case result := <-resultC:
+		status = result.StatusCode
 	}
 	err = <-outputErr
 	return
