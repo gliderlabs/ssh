@@ -107,12 +107,13 @@ func dockerRun(cfg *container.Config, sess ssh.Session) (status int64, cleanup f
 			}
 		}()
 	}
-	statusChan, chanErr := docker.ContainerWait(ctx, res.ID, container.WaitConditionNotRunning)
-	if chanErr != nil {
+	resultC, errC := docker.ContainerWait(ctx, res.ID, container.WaitConditionNotRunning)
+	select {
+	case err = <-errC:
 		return
+	case result := <-resultC:
+		status = result.StatusCode
 	}
-	err = <-chanErr
-	s := <-statusChan
-	status = s.StatusCode
+	err = <-outputErr
 	return
 }
