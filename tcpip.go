@@ -3,6 +3,7 @@ package ssh
 import (
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"strconv"
 	"sync"
@@ -25,7 +26,7 @@ type localForwardChannelData struct {
 
 type directTCPHandler struct{}
 
-func (_ directTCPHandler) HandleChannel(ctx *sshContext, newChan gossh.NewChannel) {
+func (_ directTCPHandler) HandleChannel(ctx Context, newChan gossh.NewChannel) {
 	srv := ctx.Value(ContextKeyServer).(*Server)
 	d := localForwardChannelData{}
 	if err := gossh.Unmarshal(newChan.ExtraData(), &d); err != nil {
@@ -92,7 +93,7 @@ type forwardedTCPHandler struct {
 	sync.Mutex
 }
 
-func (h forwardedTCPHandler) HandleRequest(ctx *sshContext, req *gossh.Request) (bool, []byte) {
+func (h forwardedTCPHandler) HandleRequest(ctx Context, req *gossh.Request) (bool, []byte) {
 	// TODO: RemotePortForwardingCallback
 	h.Lock()
 	if h.forwards == nil {
@@ -119,6 +120,15 @@ func (h forwardedTCPHandler) HandleRequest(ctx *sshContext, req *gossh.Request) 
 		h.forwards[addr] = ln
 		h.Unlock()
 		go func() {
+			<-ctx.Done()
+			h.Lock()
+			ln, ok := h.forwards[addr]
+			h.Unlock()
+			if ok {
+				ln.Close()
+			}
+		}()
+		go func() {
 			for {
 				c, err := ln.Accept()
 				if err != nil {
@@ -137,6 +147,7 @@ func (h forwardedTCPHandler) HandleRequest(ctx *sshContext, req *gossh.Request) 
 					ch, reqs, err := conn.OpenChannel(forwardedTCPChannelType, payload)
 					if err != nil {
 						// TODO: log failure to open channel
+						log.Println(err)
 						c.Close()
 						return
 					}
@@ -153,6 +164,9 @@ func (h forwardedTCPHandler) HandleRequest(ctx *sshContext, req *gossh.Request) 
 					}()
 				}()
 			}
+			h.Lock()
+			delete(h.forwards, addr)
+			h.Unlock()
 		}()
 		return true, gossh.Marshal(&remoteForwardSuccess{uint32(destPort)})
 

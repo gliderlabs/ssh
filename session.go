@@ -68,7 +68,7 @@ type Session interface {
 
 type sessionHandler struct{}
 
-func (_ sessionHandler) HandleChannel(ctx *sshContext, newChan gossh.NewChannel) {
+func (_ sessionHandler) HandleChannel(ctx Context, newChan gossh.NewChannel) {
 	srv := ctx.Value(ContextKeyServer).(*Server)
 	conn := ctx.Value(ContextKeyConn).(*gossh.ServerConn)
 	ch, reqs, err := newChan.Accept()
@@ -97,7 +97,7 @@ type session struct {
 	env     []string
 	ptyCb   PtyCallback
 	cmd     []string
-	ctx     *sshContext
+	ctx     Context
 }
 
 func (sess *session) Write(p []byte) (n int, err error) {
@@ -132,7 +132,7 @@ func (sess *session) Permissions() Permissions {
 }
 
 func (sess *session) Context() context.Context {
-	return sess.ctx.Context
+	return sess.ctx
 }
 
 func (sess *session) Exit(code int) error {

@@ -43,11 +43,11 @@ type Server struct {
 }
 
 type RequestHandler interface {
-	HandleRequest(ctx *sshContext, req *gossh.Request) (ok bool, payload []byte)
+	HandleRequest(ctx Context, req *gossh.Request) (ok bool, payload []byte)
 }
 
 type ChannelHandler interface {
-	HandleChannel(ctx *sshContext, newChan gossh.NewChannel)
+	HandleChannel(ctx Context, newChan gossh.NewChannel)
 }
 
 func (srv *Server) ensureHostSigner() error {
@@ -251,14 +251,15 @@ func (srv *Server) handleConn(newConn net.Conn) {
 	}
 }
 
-func (srv *Server) handleRequests(ctx *sshContext, in <-chan *gossh.Request) {
+func (srv *Server) handleRequests(ctx Context, in <-chan *gossh.Request) {
 	for req := range in {
 		handler, found := srv.requestHandlers[req.Type]
 		if !found && req.WantReply {
 			req.Reply(false, nil)
 			continue
 		}
-		ret, payload := handler.HandleRequest(ctx, req)
+		reqCtx, _ := context.WithCancel(ctx)
+		ret, payload := handler.HandleRequest(&sshContext{reqCtx}, req)
 		if req.WantReply {
 			req.Reply(ret, payload)
 		}
