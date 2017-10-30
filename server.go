@@ -56,10 +56,6 @@ func (srv *Server) ensureHostSigner() error {
 }
 
 func (srv *Server) config(ctx *sshContext) *gossh.ServerConfig {
-	srv.channelHandlers = map[string]channelHandler{
-		"session":      sessionHandler,
-		"direct-tcpip": directTcpipHandler,
-	}
 	config := &gossh.ServerConfig{}
 	for _, signer := range srv.HostSigners {
 		config.AddHostKey(signer)
@@ -163,6 +159,12 @@ func (srv *Server) Serve(l net.Listener) error {
 	}
 	if srv.Handler == nil {
 		srv.Handler = DefaultHandler
+	}
+	if srv.channelHandlers == nil {
+		srv.channelHandlers = map[string]channelHandler{
+			"session":      sessionHandler,
+			"direct-tcpip": directTcpipHandler,
+		}
 	}
 	var tempDelay time.Duration
 
