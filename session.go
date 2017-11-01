@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"sync"
 
 	"github.com/anmitsu/go-shlex"
 	gossh "golang.org/x/crypto/ssh"
@@ -63,8 +64,18 @@ type Session interface {
 	// of whether or not a PTY was accepted for this session.
 	Pty() (Pty, <-chan Window, bool)
 
-	// TODO: Signals(c chan<- Signal)
+	// Signals registers a channel to receive signals sent from the client. The
+	// channel must handle signal sends or it will block the SSH request loop.
+	// Registering nil will unregister the channel from signal sends. During the
+	// time no channel is registered signals are buffered up to a reasonable amount.
+	// If there are buffered signals when a channel is registered, they will be
+	// sent in order on the channel immediately after registering.
+	Signals(c chan<- Signal)
 }
+
+// maxSigBufSize is how many signals will be buffered
+// when there is no signal channel specified
+const maxSigBufSize = 128
 
 type sessionHandler struct{}
 
@@ -87,6 +98,7 @@ func (_ sessionHandler) HandleChannel(ctx Context, newChan gossh.NewChannel) {
 }
 
 type session struct {
+	sync.Mutex
 	gossh.Channel
 	conn    *gossh.ServerConn
 	handler Handler
@@ -98,6 +110,8 @@ type session struct {
 	ptyCb   PtyCallback
 	cmd     []string
 	ctx     Context
+	sigCh   chan<- Signal
+	sigBuf  []Signal
 }
 
 func (sess *session) Write(p []byte) (n int, err error) {
@@ -136,6 +150,8 @@ func (sess *session) Context() context.Context {
 }
 
 func (sess *session) Exit(code int) error {
+	sess.Lock()
+	defer sess.Unlock()
 	if sess.exited {
 		return errors.New("Session.Exit called multiple times")
 	}
@@ -176,6 +192,19 @@ func (sess *session) Pty() (Pty, <-chan Window, bool) {
 	return Pty{}, sess.winch, false
 }
 
+func (sess *session) Signals(c chan<- Signal) {
+	sess.Lock()
+	defer sess.Unlock()
+	sess.sigCh = c
+	if len(sess.sigBuf) > 0 {
+		go func() {
+			for _, sig := range sess.sigBuf {
+				sess.sigCh <- sig
+			}
+		}()
+	}
+}
+
 func (sess *session) handleRequests(reqs <-chan *gossh.Request) {
 	for req := range reqs {
 		switch req.Type {
@@ -199,10 +228,22 @@ func (sess *session) handleRequests(reqs <-chan *gossh.Request) {
 				req.Reply(false, nil)
 				continue
 			}
-			var kv = struct{ Key, Value string }{}
+			var kv struct{ Key, Value string }
 			gossh.Unmarshal(req.Payload, &kv)
 			sess.env = append(sess.env, fmt.Sprintf("%s=%s", kv.Key, kv.Value))
 			req.Reply(true, nil)
+		case "signal":
+			var payload struct{ Signal string }
+			gossh.Unmarshal(req.Payload, &payload)
+			sess.Lock()
+			if sess.sigCh != nil {
+				sess.sigCh <- Signal(payload.Signal)
+			} else {
+				if len(sess.sigBuf) < maxSigBufSize {
+					sess.sigBuf = append(sess.sigBuf, Signal(payload.Signal))
+				}
+			}
+			sess.Unlock()
 		case "pty-req":
 			if sess.handled || sess.pty != nil {
 				req.Reply(false, nil)
