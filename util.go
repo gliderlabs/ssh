@@ -9,7 +9,7 @@ import (
 )
 
 func generateSigner() (ssh.Signer, error) {
-	key, err := rsa.GenerateKey(rand.Reader, 768)
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		return nil, err
 	}
