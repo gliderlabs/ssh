@@ -64,6 +64,9 @@ type Session interface {
 	// of whether or not a PTY was accepted for this session.
 	Pty() (Pty, <-chan Window, bool)
 
+	// Sftp returns a boolean, when subsystem is sftp, return true
+	Sftp() bool
+
 	// Signals registers a channel to receive signals sent from the client. The
 	// channel must handle signal sends or it will block the SSH request loop.
 	// Registering nil will unregister the channel from signal sends. During the
@@ -88,7 +91,6 @@ func sessionHandler(srv *Server, conn *gossh.ServerConn, newChan gossh.NewChanne
 		conn:    conn,
 		handler: srv.Handler,
 		ptyCb:   srv.PtyCallback,
-		sftpCb:  srv.SftpCallback,
 		ctx:     ctx,
 	}
 	sess.handleRequests(reqs)
@@ -105,7 +107,7 @@ type session struct {
 	winch   chan Window
 	env     []string
 	ptyCb   PtyCallback
-	sftpCb  SftpCallback
+	sftp    bool
 	cmd     []string
 	ctx     *sshContext
 	sigCh   chan<- Signal
@@ -188,6 +190,10 @@ func (sess *session) Pty() (Pty, <-chan Window, bool) {
 		return *sess.pty, sess.winch, true
 	}
 	return Pty{}, sess.winch, false
+}
+
+func (sess *session) Sftp() bool {
+	return sess.sftp
 }
 
 func (sess *session) Signals(c chan<- Signal) {
@@ -283,17 +289,19 @@ func (sess *session) handleRequests(reqs <-chan *gossh.Request) {
 			setAgentRequested(sess)
 			req.Reply(true, nil)
 		case "subsystem":
+
 			if string(req.Payload[4:]) == "sftp" {
-				if sess.sftpCb != nil {
-					ok := sess.sftpCb(sess)
-					if !ok {
-						req.Reply(false, nil)
-						continue
-					}
-				} else {
+				if sess.handled {
 					req.Reply(false, nil)
 					continue
 				}
+				sess.handled = true
+				sess.sftp = true
+				req.Reply(true, nil)
+				go func() {
+					sess.handler(sess)
+					sess.Exit(0)
+				}()
 			} else {
 				// TODO: debug log
 				req.Reply(false, nil)
