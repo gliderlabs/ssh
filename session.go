@@ -88,6 +88,7 @@ func sessionHandler(srv *Server, conn *gossh.ServerConn, newChan gossh.NewChanne
 		conn:    conn,
 		handler: srv.Handler,
 		ptyCb:   srv.PtyCallback,
+		sftpCb:  srv.SftpCallback,
 		ctx:     ctx,
 	}
 	sess.handleRequests(reqs)
@@ -104,6 +105,7 @@ type session struct {
 	winch   chan Window
 	env     []string
 	ptyCb   PtyCallback
+	sftpCb  SftpCallback
 	cmd     []string
 	ctx     *sshContext
 	sigCh   chan<- Signal
@@ -280,6 +282,24 @@ func (sess *session) handleRequests(reqs <-chan *gossh.Request) {
 			// TODO: option/callback to allow agent forwarding
 			setAgentRequested(sess)
 			req.Reply(true, nil)
+		case "subsystem":
+			if string(req.Payload[4:]) == "sftp" {
+				if sess.sftpCb != nil {
+					ok := sess.sftpCb(sess)
+					if !ok {
+						req.Reply(false, nil)
+						continue
+					}
+				} else {
+					req.Reply(false, nil)
+					continue
+				}
+			} else {
+				// TODO: debug log
+				req.Reply(false, nil)
+				continue
+			}
+
 		default:
 			// TODO: debug log
 		}

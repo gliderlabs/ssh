@@ -27,6 +27,7 @@ type Server struct {
 	PasswordHandler             PasswordHandler             // password authentication handler
 	PublicKeyHandler            PublicKeyHandler            // public key authentication handler
 	PtyCallback                 PtyCallback                 // callback for allowing PTY sessions, allows all if nil
+	SftpCallback                SftpCallback                // callback for allowing sftp sessions, allows all if nil
 	ConnCallback                ConnCallback                // optional callback for wrapping net.Conn before handling
 	LocalPortForwardingCallback LocalPortForwardingCallback // callback for allowing local port forwarding, denies all if nil
 
