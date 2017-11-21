@@ -195,8 +195,8 @@ func (sess *session) Pty() (Pty, <-chan Window, bool) {
 }
 
 func (sess *session) Subsystem(sub string) bool {
-	if _, ok := sess.subsystem[sub]; ok {
-		return sess.subsystem[sub]
+	if v, ok := sess.subsystem[sub]; ok {
+		return v
 	}
 	return false
 }
