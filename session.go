@@ -71,6 +71,9 @@ type Session interface {
 	// If there are buffered signals when a channel is registered, they will be
 	// sent in order on the channel immediately after registering.
 	Signals(c chan<- Signal)
+
+	// Payload returns the payload information sent by the subsystem request
+	Payload() []byte
 }
 
 // maxSigBufSize is how many signals will be buffered
@@ -84,11 +87,12 @@ func sessionHandler(srv *Server, conn *gossh.ServerConn, newChan gossh.NewChanne
 		return
 	}
 	sess := &session{
-		Channel: ch,
-		conn:    conn,
-		handler: srv.Handler,
-		ptyCb:   srv.PtyCallback,
-		ctx:     ctx,
+		Channel:          ch,
+		conn:             conn,
+		handler:          srv.Handler,
+		subsystemHandler: srv.SubsystemHandler,
+		ptyCb:            srv.PtyCallback,
+		ctx:              ctx,
 	}
 	sess.handleRequests(reqs)
 }
@@ -96,18 +100,20 @@ func sessionHandler(srv *Server, conn *gossh.ServerConn, newChan gossh.NewChanne
 type session struct {
 	sync.Mutex
 	gossh.Channel
-	conn    *gossh.ServerConn
-	handler Handler
-	handled bool
-	exited  bool
-	pty     *Pty
-	winch   chan Window
-	env     []string
-	ptyCb   PtyCallback
-	cmd     []string
-	ctx     *sshContext
-	sigCh   chan<- Signal
-	sigBuf  []Signal
+	conn             *gossh.ServerConn
+	handler          Handler
+	subsystemHandler Handler
+	handled          bool
+	exited           bool
+	pty              *Pty
+	winch            chan Window
+	env              []string
+	ptyCb            PtyCallback
+	cmd              []string
+	ctx              *sshContext
+	sigCh            chan<- Signal
+	sigBuf           []Signal
+	payload          []byte
 }
 
 func (sess *session) Write(p []byte) (n int, err error) {
@@ -201,6 +207,10 @@ func (sess *session) Signals(c chan<- Signal) {
 	}
 }
 
+func (sess *session) Payload() []byte {
+	return sess.payload
+}
+
 func (sess *session) handleRequests(reqs <-chan *gossh.Request) {
 	for req := range reqs {
 		switch req.Type {
@@ -280,6 +290,19 @@ func (sess *session) handleRequests(reqs <-chan *gossh.Request) {
 			// TODO: option/callback to allow agent forwarding
 			setAgentRequested(sess)
 			req.Reply(true, nil)
+		case "subsystem":
+			if sess.handled {
+				req.Reply(false, nil)
+				continue
+			}
+			sess.handled = true
+			sess.payload = req.Payload
+			req.Reply(true, nil)
+
+			go func() {
+				sess.subsystemHandler(sess)
+				sess.Exit(0)
+			}()
 		default:
 			// TODO: debug log
 		}
