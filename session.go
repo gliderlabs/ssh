@@ -225,6 +225,7 @@ func (sess *session) handleRequests(reqs <-chan *gossh.Request) {
 			var payload = struct{ Value string }{}
 			gossh.Unmarshal(req.Payload, &payload)
 			sess.cmd, _ = shlex.Split(payload.Value, true)
+			sess.payload = []byte(payload.Value)
 			go func() {
 				sess.handler(sess)
 				sess.Exit(0)
