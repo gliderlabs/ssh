@@ -19,10 +19,11 @@ var ErrServerClosed = errors.New("ssh: Server closed")
 // Server is a valid configuration. When both PasswordHandler and
 // PublicKeyHandler are nil, no client authentication is performed.
 type Server struct {
-	Addr        string   // TCP address to listen on, ":22" if empty
-	Handler     Handler  // handler to invoke, ssh.DefaultHandler if nil
-	HostSigners []Signer // private keys for the host key, must have at least one
-	Version     string   // server version to be sent before the initial handshake
+	Addr             string   // TCP address to listen on, ":22" if empty
+	Handler          Handler  // handler to invoke, ssh.DefaultHandler if nil
+	SubsystemHandler Handler  // subsystem specific handler to invoke, ssh.DefaultHandler if nil
+	HostSigners      []Signer // private keys for the host key, must have at least one
+	Version          string   // server version to be sent before the initial handshake
 
 	PasswordHandler             PasswordHandler             // password authentication handler
 	PublicKeyHandler            PublicKeyHandler            // public key authentication handler
@@ -163,6 +164,9 @@ func (srv *Server) Serve(l net.Listener) error {
 	}
 	if srv.Handler == nil {
 		srv.Handler = DefaultHandler
+	}
+	if srv.SubsystemHandler == nil {
+		srv.SubsystemHandler = DefaultHandler
 	}
 	var tempDelay time.Duration
 
