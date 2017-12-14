@@ -64,6 +64,9 @@ type Session interface {
 	// of whether or not a PTY was accepted for this session.
 	Pty() (Pty, <-chan Window, bool)
 
+	// Subsystem returns a boolean, if the specified subsystem exists, return true
+	Subsystem(string) bool
+
 	// Signals registers a channel to receive signals sent from the client. The
 	// channel must handle signal sends or it will block the SSH request loop.
 	// Registering nil will unregister the channel from signal sends. During the
@@ -84,11 +87,12 @@ func sessionHandler(srv *Server, conn *gossh.ServerConn, newChan gossh.NewChanne
 		return
 	}
 	sess := &session{
-		Channel: ch,
-		conn:    conn,
-		handler: srv.Handler,
-		ptyCb:   srv.PtyCallback,
-		ctx:     ctx,
+		Channel:   ch,
+		conn:      conn,
+		handler:   srv.Handler,
+		ptyCb:     srv.PtyCallback,
+		ctx:       ctx,
+		subsystem: map[string]bool{},
 	}
 	sess.handleRequests(reqs)
 }
@@ -104,10 +108,12 @@ type session struct {
 	winch   chan Window
 	env     []string
 	ptyCb   PtyCallback
-	cmd     []string
-	ctx     *sshContext
-	sigCh   chan<- Signal
-	sigBuf  []Signal
+
+	subsystem map[string]bool
+	cmd       []string
+	ctx       *sshContext
+	sigCh     chan<- Signal
+	sigBuf    []Signal
 }
 
 func (sess *session) Write(p []byte) (n int, err error) {
@@ -186,6 +192,13 @@ func (sess *session) Pty() (Pty, <-chan Window, bool) {
 		return *sess.pty, sess.winch, true
 	}
 	return Pty{}, sess.winch, false
+}
+
+func (sess *session) Subsystem(sub string) bool {
+	if v, ok := sess.subsystem[sub]; ok {
+		return v
+	}
+	return false
 }
 
 func (sess *session) Signals(c chan<- Signal) {
@@ -280,6 +293,26 @@ func (sess *session) handleRequests(reqs <-chan *gossh.Request) {
 			// TODO: option/callback to allow agent forwarding
 			setAgentRequested(sess)
 			req.Reply(true, nil)
+		case "subsystem":
+
+			if string(req.Payload[4:]) == "sftp" {
+				if sess.handled {
+					req.Reply(false, nil)
+					continue
+				}
+				sess.handled = true
+				sess.subsystem["sftp"] = true
+				req.Reply(true, nil)
+				go func() {
+					sess.handler(sess)
+					sess.Exit(0)
+				}()
+			} else {
+				// TODO: debug log
+				req.Reply(false, nil)
+				continue
+			}
+
 		default:
 			// TODO: debug log
 		}
