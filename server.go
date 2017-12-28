@@ -42,7 +42,7 @@ type Server struct {
 }
 
 // internal for now
-type channelHandler func(srv *Server, conn *gossh.ServerConn, newChan gossh.NewChannel, ctx *sshContext)
+type channelHandler func(srv *Server, conn *gossh.ServerConn, newChan gossh.NewChannel, ctx Context)
 
 func (srv *Server) ensureHostSigner() error {
 	if len(srv.HostSigners) == 0 {
@@ -55,7 +55,7 @@ func (srv *Server) ensureHostSigner() error {
 	return nil
 }
 
-func (srv *Server) config(ctx *sshContext) *gossh.ServerConfig {
+func (srv *Server) config(ctx Context) *gossh.ServerConfig {
 	srv.channelHandlers = map[string]channelHandler{
 		"session":      sessionHandler,
 		"direct-tcpip": directTcpipHandler,
@@ -72,7 +72,7 @@ func (srv *Server) config(ctx *sshContext) *gossh.ServerConfig {
 	}
 	if srv.PasswordHandler != nil {
 		config.PasswordCallback = func(conn gossh.ConnMetadata, password []byte) (*gossh.Permissions, error) {
-			ctx.applyConnMetadata(conn)
+			applyConnMetadata(ctx, conn)
 			if ok := srv.PasswordHandler(ctx, string(password)); !ok {
 				return ctx.Permissions().Permissions, fmt.Errorf("permission denied")
 			}
@@ -81,7 +81,7 @@ func (srv *Server) config(ctx *sshContext) *gossh.ServerConfig {
 	}
 	if srv.PublicKeyHandler != nil {
 		config.PublicKeyCallback = func(conn gossh.ConnMetadata, key gossh.PublicKey) (*gossh.Permissions, error) {
-			ctx.applyConnMetadata(conn)
+			applyConnMetadata(ctx, conn)
 			if ok := srv.PublicKeyHandler(ctx, key); !ok {
 				return ctx.Permissions().Permissions, fmt.Errorf("permission denied")
 			}
@@ -223,7 +223,7 @@ func (srv *Server) handleConn(newConn net.Conn) {
 	defer srv.trackConn(sshConn, false)
 
 	ctx.SetValue(ContextKeyConn, sshConn)
-	ctx.applyConnMetadata(sshConn)
+	applyConnMetadata(ctx, sshConn)
 	go gossh.DiscardRequests(reqs)
 	for ch := range chans {
 		handler, found := srv.channelHandlers[ch.ChannelType()]
