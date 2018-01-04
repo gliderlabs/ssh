@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"sync"
 
@@ -324,6 +325,7 @@ func (sess *session) handleRequests(reqs <-chan *gossh.Request) {
 			}
 
 		default:
+			log.Printf("unknow request : %+v", req)
 			// TODO: debug log
 		}
 	}
