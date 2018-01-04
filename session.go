@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"sync"
 
@@ -44,6 +45,9 @@ type Session interface {
 	// which considers quoting not just whitespace.
 	Command() []string
 
+	// CommandRaw returns a raw command
+	CommandRaw() string
+
 	// PublicKey returns the PublicKey used to authenticate. If a public key was not
 	// used it will return nil.
 	PublicKey() PublicKey
@@ -63,6 +67,9 @@ type Session interface {
 	// Pty returns PTY information, a channel of window size changes, and a boolean
 	// of whether or not a PTY was accepted for this session.
 	Pty() (Pty, <-chan Window, bool)
+
+	// Subsystem returns a boolean, if the specified subsystem exists, return true
+	Subsystem(string) bool
 
 	// Signals registers a channel to receive signals sent from the client. The
 	// channel must handle signal sends or it will block the SSH request loop.
@@ -84,11 +91,12 @@ func sessionHandler(srv *Server, conn *gossh.ServerConn, newChan gossh.NewChanne
 		return
 	}
 	sess := &session{
-		Channel: ch,
-		conn:    conn,
-		handler: srv.Handler,
-		ptyCb:   srv.PtyCallback,
-		ctx:     ctx,
+		Channel:   ch,
+		conn:      conn,
+		handler:   srv.Handler,
+		ptyCb:     srv.PtyCallback,
+		ctx:       ctx,
+		subsystem: map[string]bool{},
 	}
 	sess.handleRequests(reqs)
 }
@@ -104,10 +112,13 @@ type session struct {
 	winch   chan Window
 	env     []string
 	ptyCb   PtyCallback
-	cmd     []string
-	ctx     *sshContext
-	sigCh   chan<- Signal
-	sigBuf  []Signal
+
+	subsystem map[string]bool
+	cmd       []string
+	cmdraw    string
+	ctx       *sshContext
+	sigCh     chan<- Signal
+	sigBuf    []Signal
 }
 
 func (sess *session) Write(p []byte) (n int, err error) {
@@ -181,11 +192,22 @@ func (sess *session) Command() []string {
 	return append([]string(nil), sess.cmd...)
 }
 
+func (sess *session) CommandRaw() string {
+	return sess.cmdraw
+}
+
 func (sess *session) Pty() (Pty, <-chan Window, bool) {
 	if sess.pty != nil {
 		return *sess.pty, sess.winch, true
 	}
 	return Pty{}, sess.winch, false
+}
+
+func (sess *session) Subsystem(sub string) bool {
+	if v, ok := sess.subsystem[sub]; ok {
+		return v
+	}
+	return false
 }
 
 func (sess *session) Signals(c chan<- Signal) {
@@ -214,6 +236,7 @@ func (sess *session) handleRequests(reqs <-chan *gossh.Request) {
 
 			var payload = struct{ Value string }{}
 			gossh.Unmarshal(req.Payload, &payload)
+			sess.cmdraw = payload.Value
 			sess.cmd, _ = shlex.Split(payload.Value, true)
 			go func() {
 				sess.handler(sess)
@@ -280,7 +303,29 @@ func (sess *session) handleRequests(reqs <-chan *gossh.Request) {
 			// TODO: option/callback to allow agent forwarding
 			setAgentRequested(sess)
 			req.Reply(true, nil)
+		case agentGoKeepalive, agentSSHKeepalive:
+			req.Reply(true, nil)
+		case "subsystem":
+			if string(req.Payload[4:]) == "sftp" {
+				if sess.handled {
+					req.Reply(false, nil)
+					continue
+				}
+				sess.handled = true
+				sess.subsystem["sftp"] = true
+				req.Reply(true, nil)
+				go func() {
+					sess.handler(sess)
+					sess.Exit(0)
+				}()
+			} else {
+				// TODO: debug log
+				req.Reply(false, nil)
+				continue
+			}
+
 		default:
+			log.Printf("unknow request : %+v", req)
 			// TODO: debug log
 		}
 	}
