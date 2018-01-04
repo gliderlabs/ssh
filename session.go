@@ -191,7 +191,7 @@ func (sess *session) Command() []string {
 	return append([]string(nil), sess.cmd...)
 }
 
-func (sess *session) CommandRaw() []string {
+func (sess *session) CommandRaw() string {
 	return sess.cmdraw
 }
 
