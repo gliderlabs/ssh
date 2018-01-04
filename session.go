@@ -302,8 +302,9 @@ func (sess *session) handleRequests(reqs <-chan *gossh.Request) {
 			// TODO: option/callback to allow agent forwarding
 			setAgentRequested(sess)
 			req.Reply(true, nil)
+		case agentGoKeepalive, agentSSHKeepalive:
+			req.Reply(true, nil)
 		case "subsystem":
-
 			if string(req.Payload[4:]) == "sftp" {
 				if sess.handled {
 					req.Reply(false, nil)
