@@ -77,7 +77,7 @@ type Session interface {
 // when there is no signal channel specified
 const maxSigBufSize = 128
 
-func sessionHandler(srv *Server, conn *gossh.ServerConn, newChan gossh.NewChannel, ctx *sshContext) {
+func sessionHandler(srv *Server, conn *gossh.ServerConn, newChan gossh.NewChannel, ctx Context) {
 	ch, reqs, err := newChan.Accept()
 	if err != nil {
 		// TODO: trigger event callback
@@ -105,7 +105,7 @@ type session struct {
 	env     []string
 	ptyCb   PtyCallback
 	cmd     []string
-	ctx     *sshContext
+	ctx     Context
 	sigCh   chan<- Signal
 	sigBuf  []Signal
 }
@@ -142,7 +142,7 @@ func (sess *session) Permissions() Permissions {
 }
 
 func (sess *session) Context() context.Context {
-	return sess.ctx.Context
+	return sess.ctx
 }
 
 func (sess *session) Exit(code int) error {
@@ -278,7 +278,7 @@ func (sess *session) handleRequests(reqs <-chan *gossh.Request) {
 			req.Reply(ok, nil)
 		case agentRequestType:
 			// TODO: option/callback to allow agent forwarding
-			setAgentRequested(sess)
+			SetAgentRequested(sess.ctx)
 			req.Reply(true, nil)
 		default:
 			// TODO: debug log
