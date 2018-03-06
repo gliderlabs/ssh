@@ -14,7 +14,7 @@ package](https://godoc.org/golang.org/x/crypto/ssh) with a higher-level API for
 building SSH servers. The goal of the API was to make it as simple as using
 [net/http](https://golang.org/pkg/net/http/), so the API is very similar:
 
-```
+```go
  package main
 
  import (

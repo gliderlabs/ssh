@@ -22,8 +22,10 @@ const (
 // client requested agent forwarding
 var contextKeyAgentRequest = &contextKey{"auth-agent-req"}
 
-func setAgentRequested(sess *session) {
-	sess.ctx.SetValue(contextKeyAgentRequest, true)
+// SetAgentRequested sets up the session context so that AgentRequested
+// returns true.
+func SetAgentRequested(ctx Context) {
+	ctx.SetValue(contextKeyAgentRequest, true)
 }
 
 // AgentRequested returns true if the client requested agent forwarding.

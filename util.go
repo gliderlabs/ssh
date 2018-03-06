@@ -3,51 +3,13 @@ package ssh
 import (
 	"crypto/rand"
 	"crypto/rsa"
-	"crypto/x509"
 	"encoding/binary"
-	"encoding/pem"
-	"fmt"
 
 	"golang.org/x/crypto/ssh"
 )
 
-func signerFromBlock(block *pem.Block) (ssh.Signer, error) {
-	var key interface{}
-	var err error
-	switch block.Type {
-	case "RSA PRIVATE KEY":
-		key, err = x509.ParsePKCS1PrivateKey(block.Bytes)
-	case "EC PRIVATE KEY":
-		key, err = x509.ParseECPrivateKey(block.Bytes)
-	case "DSA PRIVATE KEY":
-		key, err = ssh.ParseDSAPrivateKey(block.Bytes)
-	default:
-		return nil, fmt.Errorf("unsupported key type %q", block.Type)
-	}
-	if err != nil {
-		return nil, err
-	}
-	signer, err := ssh.NewSignerFromKey(key)
-	if err != nil {
-		return nil, err
-	}
-	return signer, nil
-}
-
-func decodePemBlocks(pemData []byte) []*pem.Block {
-	var blocks []*pem.Block
-	var block *pem.Block
-	for {
-		block, pemData = pem.Decode(pemData)
-		if block == nil {
-			return blocks
-		}
-		blocks = append(blocks, block)
-	}
-}
-
 func generateSigner() (ssh.Signer, error) {
-	key, err := rsa.GenerateKey(rand.Reader, 768)
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		return nil, err
 	}
