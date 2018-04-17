@@ -219,7 +219,7 @@ func TestPty(t *testing.T) {
 	}, nil)
 	defer cleanup()
 	if err := session.RequestPty(term, winHeight, winWidth, gossh.TerminalModes{}); err != nil {
-		t.Fatalf("unexpected error requesting PTY", err)
+		t.Fatalf("expected nil but got %v", err)
 	}
 	if err := session.Shell(); err != nil {
 		t.Fatalf("expected nil but got %v", err)
@@ -252,7 +252,7 @@ func TestPtyResize(t *testing.T) {
 	defer cleanup()
 	// winch0
 	if err := session.RequestPty("xterm", winch0.Height, winch0.Width, gossh.TerminalModes{}); err != nil {
-		t.Fatalf("unexpected error requesting PTY", err)
+		t.Fatalf("expected nil but got %v", err)
 	}
 	if err := session.Shell(); err != nil {
 		t.Fatalf("expected nil but got %v", err)
