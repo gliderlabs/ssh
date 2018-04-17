@@ -35,10 +35,11 @@ type Server struct {
 
 	channelHandlers map[string]channelHandler
 
-	mu        sync.Mutex
-	listeners map[net.Listener]struct{}
-	conns     map[*gossh.ServerConn]struct{}
-	doneChan  chan struct{}
+	listenerWg sync.WaitGroup
+	mu         sync.Mutex
+	listeners  map[net.Listener]struct{}
+	conns      map[*gossh.ServerConn]struct{}
+	doneChan   chan struct{}
 }
 
 // internal for now
@@ -110,15 +111,6 @@ func (srv *Server) Close() error {
 	return err
 }
 
-// shutdownPollInterval is how often we poll for quiescence
-// during Server.Shutdown. This is lower during tests, to
-// speed up tests.
-// Ideally we could find a solution that doesn't involve polling,
-// but which also doesn't have a high runtime cost (and doesn't
-// involve any contentious mutexes), but that is left as an
-// exercise for the reader.
-var shutdownPollInterval = 500 * time.Millisecond
-
 // Shutdown gracefully shuts down the server without interrupting any
 // active connections. Shutdown works by first closing all open
 // listeners, and then waiting indefinitely for connections to close.
@@ -129,22 +121,19 @@ func (srv *Server) Shutdown(ctx context.Context) error {
 	lnerr := srv.closeListenersLocked()
 	srv.closeDoneChanLocked()
 	srv.mu.Unlock()
-	ticker := time.NewTicker(shutdownPollInterval)
-	defer ticker.Stop()
-	for {
-		srv.mu.Lock()
-		conns := len(srv.conns)
-		srv.mu.Unlock()
-		if conns == 0 {
-			return lnerr
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-ticker.C:
-		}
-	}
 
+	listenerWgChan := make(chan struct{}, 1)
+	go func() {
+		srv.listenerWg.Wait()
+		listenerWgChan <- struct{}{}
+	}()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-listenerWgChan:
+		return lnerr
+	}
 }
 
 // Serve accepts incoming connections on the Listener l, creating a new
@@ -315,8 +304,10 @@ func (srv *Server) trackListener(ln net.Listener, add bool) {
 			srv.doneChan = nil
 		}
 		srv.listeners[ln] = struct{}{}
+		srv.listenerWg.Add(1)
 	} else {
 		delete(srv.listeners, ln)
+		srv.listenerWg.Done()
 	}
 }
 
