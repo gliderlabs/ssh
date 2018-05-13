@@ -84,11 +84,12 @@ func sessionHandler(srv *Server, conn *gossh.ServerConn, newChan gossh.NewChanne
 		return
 	}
 	sess := &session{
-		Channel: ch,
-		conn:    conn,
-		handler: srv.Handler,
-		ptyCb:   srv.PtyCallback,
-		ctx:     ctx,
+		Channel:   ch,
+		conn:      conn,
+		handler:   srv.Handler,
+		ptyCb:     srv.PtyCallback,
+		sessPolCb: srv.SessionPolicyCallback,
+		ctx:       ctx,
 	}
 	sess.handleRequests(reqs)
 }
@@ -96,18 +97,19 @@ func sessionHandler(srv *Server, conn *gossh.ServerConn, newChan gossh.NewChanne
 type session struct {
 	sync.Mutex
 	gossh.Channel
-	conn    *gossh.ServerConn
-	handler Handler
-	handled bool
-	exited  bool
-	pty     *Pty
-	winch   chan Window
-	env     []string
-	ptyCb   PtyCallback
-	cmd     []string
-	ctx     Context
-	sigCh   chan<- Signal
-	sigBuf  []Signal
+	conn      *gossh.ServerConn
+	handler   Handler
+	handled   bool
+	exited    bool
+	pty       *Pty
+	winch     chan Window
+	env       []string
+	ptyCb     PtyCallback
+	sessPolCb SessionPolicyCallback
+	cmd       []string
+	ctx       Context
+	sigCh     chan<- Signal
+	sigBuf    []Signal
 }
 
 func (sess *session) Write(p []byte) (n int, err error) {
@@ -209,12 +211,22 @@ func (sess *session) handleRequests(reqs <-chan *gossh.Request) {
 				req.Reply(false, nil)
 				continue
 			}
-			sess.handled = true
-			req.Reply(true, nil)
 
 			var payload = struct{ Value string }{}
 			gossh.Unmarshal(req.Payload, &payload)
 			sess.cmd, _ = shlex.Split(payload.Value, true)
+
+			// If there's a session policy callback, we need to confirm before
+			// accepting the session.
+			if sess.sessPolCb != nil && !sess.sessPolCb(sess, req.Type) {
+				sess.cmd = nil
+				req.Reply(false, nil)
+				continue
+			}
+
+			sess.handled = true
+			req.Reply(true, nil)
+
 			go func() {
 				sess.handler(sess)
 				sess.Exit(0)

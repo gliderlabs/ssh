@@ -29,6 +29,7 @@ type Server struct {
 	PtyCallback                 PtyCallback                 // callback for allowing PTY sessions, allows all if nil
 	ConnCallback                ConnCallback                // optional callback for wrapping net.Conn before handling
 	LocalPortForwardingCallback LocalPortForwardingCallback // callback for allowing local port forwarding, denies all if nil
+	SessionPolicyCallback       SessionPolicyCallback
 
 	IdleTimeout time.Duration // connection timeout when no activity, none if empty
 	MaxTimeout  time.Duration // absolute connection timeout, none if empty
