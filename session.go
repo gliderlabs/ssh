@@ -44,6 +44,9 @@ type Session interface {
 	// which considers quoting not just whitespace.
 	Command() []string
 
+	// Subsystem returns subsystem name if one was asked for, else empty string.
+	Subsystem() string
+
 	// PublicKey returns the PublicKey used to authenticate. If a public key was not
 	// used it will return nil.
 	PublicKey() PublicKey
@@ -96,18 +99,19 @@ func sessionHandler(srv *Server, conn *gossh.ServerConn, newChan gossh.NewChanne
 type session struct {
 	sync.Mutex
 	gossh.Channel
-	conn    *gossh.ServerConn
-	handler Handler
-	handled bool
-	exited  bool
-	pty     *Pty
-	winch   chan Window
-	env     []string
-	ptyCb   PtyCallback
-	cmd     []string
-	ctx     Context
-	sigCh   chan<- Signal
-	sigBuf  []Signal
+	conn      *gossh.ServerConn
+	handler   Handler
+	handled   bool
+	exited    bool
+	pty       *Pty
+	winch     chan Window
+	env       []string
+	ptyCb     PtyCallback
+	cmd       []string
+	subsystem string
+	ctx       Context
+	sigCh     chan<- Signal
+	sigBuf    []Signal
 }
 
 func (sess *session) Write(p []byte) (n int, err error) {
@@ -181,6 +185,10 @@ func (sess *session) Command() []string {
 	return append([]string(nil), sess.cmd...)
 }
 
+func (sess *session) Subsystem() string {
+	return sess.subsystem
+}
+
 func (sess *session) Pty() (Pty, <-chan Window, bool) {
 	if sess.pty != nil {
 		return *sess.pty, sess.winch, true
@@ -215,6 +223,21 @@ func (sess *session) handleRequests(reqs <-chan *gossh.Request) {
 			var payload = struct{ Value string }{}
 			gossh.Unmarshal(req.Payload, &payload)
 			sess.cmd, _ = shlex.Split(payload.Value, true)
+			go func() {
+				sess.handler(sess)
+				sess.Exit(0)
+			}()
+		case "subsystem":
+			if sess.handled {
+				req.Reply(false, nil)
+				continue
+			}
+			sess.handled = true
+			req.Reply(true, nil)
+
+			var payload = struct{ Value string }{}
+			gossh.Unmarshal(req.Payload, &payload)
+			sess.subsystem = payload.Value
 			go func() {
 				sess.handler(sess)
 				sess.Exit(0)
