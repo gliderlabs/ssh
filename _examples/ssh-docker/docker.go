@@ -92,6 +92,7 @@ func dockerRun(cfg *container.Config, sess ssh.Session) (status int64, cleanup f
 	if err != nil {
 		return
 	}
+
 	if cfg.Tty {
 		_, winCh, _ := sess.Pty()
 		go func() {
@@ -107,6 +108,7 @@ func dockerRun(cfg *container.Config, sess ssh.Session) (status int64, cleanup f
 			}
 		}()
 	}
+
 	resultC, errC := docker.ContainerWait(ctx, res.ID, container.WaitConditionNotRunning)
 	select {
 	case err = <-errC:
