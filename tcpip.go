@@ -1,9 +1,9 @@
 package ssh
 
 import (
-	"fmt"
 	"io"
 	"net"
+	"strconv"
 
 	gossh "golang.org/x/crypto/ssh"
 )
@@ -29,8 +29,8 @@ func directTcpipHandler(srv *Server, conn *gossh.ServerConn, newChan gossh.NewCh
 		return
 	}
 
-	dest := fmt.Sprintf("%s:%d", d.DestinationHost, d.DestinationPort)
-
+	dest := net.JoinHostPort(d.DestinationHost, strconv.FormatInt(int64(d.DestinationPort), 10))
+	
 	var dialer net.Dialer
 	dconn, err := dialer.DialContext(ctx, "tcp", dest)
 	if err != nil {
