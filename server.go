@@ -33,6 +33,19 @@ type Server struct {
 	IdleTimeout time.Duration // connection timeout when no activity, none if empty
 	MaxTimeout  time.Duration // absolute connection timeout, none if empty
 
+	// The allowed key exchanges algorithms. If unspecified then a
+	// default set of algorithms is used. Most users should not need to set
+	// this.
+	KeyExchanges []string
+
+	// The allowed cipher algorithms. If unspecified then a sensible
+	// default is used. Most users should not need to set this.
+	Ciphers []string
+
+	// The allowed MAC algorithms. If unspecified then a sensible default
+	// is used. Most users should not need to set this.
+	MACs []string
+
 	channelHandlers map[string]channelHandler
 
 	listenerWg sync.WaitGroup
@@ -59,6 +72,18 @@ func (srv *Server) ensureHostSigner() error {
 
 func (srv *Server) config(ctx Context) *gossh.ServerConfig {
 	config := &gossh.ServerConfig{}
+	if len(srv.KeyExchanges) > 0 {
+		config.KeyExchanges = make([]string, len(srv.KeyExchanges))
+		copy(srv.KeyExchanges, config.KeyExchanges)
+	}
+	if len(srv.Ciphers) > 0 {
+		config.Ciphers = make([]string, len(srv.Ciphers))
+		copy(srv.Ciphers, config.Ciphers)
+	}
+	if len(srv.MACs) > 0 {
+		config.MACs = make([]string, len(srv.MACs))
+		copy(srv.MACs, config.MACs)
+	}
 	for _, signer := range srv.HostSigners {
 		config.AddHostKey(signer)
 	}
