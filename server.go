@@ -24,11 +24,12 @@ type Server struct {
 	HostSigners []Signer // private keys for the host key, must have at least one
 	Version     string   // server version to be sent before the initial handshake
 
-	PasswordHandler             PasswordHandler             // password authentication handler
-	PublicKeyHandler            PublicKeyHandler            // public key authentication handler
-	PtyCallback                 PtyCallback                 // callback for allowing PTY sessions, allows all if nil
-	ConnCallback                ConnCallback                // optional callback for wrapping net.Conn before handling
-	LocalPortForwardingCallback LocalPortForwardingCallback // callback for allowing local port forwarding, denies all if nil
+	PasswordHandler               PasswordHandler               // password authentication handler
+	PublicKeyHandler              PublicKeyHandler              // public key authentication handler
+	PtyCallback                   PtyCallback                   // callback for allowing PTY sessions, allows all if nil
+	ConnCallback                  ConnCallback                  // optional callback for wrapping net.Conn before handling
+	LocalPortForwardingCallback   LocalPortForwardingCallback   // callback for allowing local port forwarding, denies all if nil
+	ReversePortForwardingCallback ReversePortForwardingCallback //callback for allowing reverse port forwarding, denies all if nil
 
 	IdleTimeout time.Duration // connection timeout when no activity, none if empty
 	MaxTimeout  time.Duration // absolute connection timeout, none if empty
@@ -44,7 +45,7 @@ type Server struct {
 	doneChan   chan struct{}
 }
 type RequestHandler interface {
-	HandleRequest(ctx Context, req *gossh.Request) (ok bool, payload []byte)
+	HandleRequest(ctx Context, srv *Server, req *gossh.Request) (ok bool, payload []byte)
 }
 
 // internal for now
@@ -235,7 +236,8 @@ func (srv *Server) handleConn(newConn net.Conn) {
 
 	ctx.SetValue(ContextKeyConn, sshConn)
 	applyConnMetadata(ctx, sshConn)
-	go gossh.DiscardRequests(reqs)
+	//go gossh.DiscardRequests(reqs)
+	go srv.handleRequests(ctx, reqs)
 	for ch := range chans {
 		handler, found := srv.channelHandlers[ch.ChannelType()]
 		if !found {
@@ -253,9 +255,9 @@ func (srv *Server) handleRequests(ctx Context, in <-chan *gossh.Request) {
 			req.Reply(false, nil)
 			continue
 		}
-		reqCtx, cancel := context.WithCancel(ctx)
-		defer cancel() ///
-		ret, payload := handler.HandleRequest(&sshContext{reqCtx}, req)
+		/*reqCtx, cancel := context.WithCancel(ctx)
+		defer cancel() */
+		ret, payload := handler.HandleRequest(ctx, srv, req)
 		if req.WantReply {
 			req.Reply(ret, payload)
 		}

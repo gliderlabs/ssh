@@ -89,8 +89,7 @@ type forwardedTCPHandler struct {
 	sync.Mutex
 }
 
-func (h forwardedTCPHandler) HandleRequest(ctx Context, req *gossh.Request) (bool, []byte) {
-	// TODO: RemotePortForwardingCallback
+func (h forwardedTCPHandler) HandleRequest(ctx Context, srv *Server, req *gossh.Request) (bool, []byte) {
 	h.Lock()
 	if h.forwards == nil {
 		h.forwards = make(map[string]net.Listener)
@@ -103,6 +102,9 @@ func (h forwardedTCPHandler) HandleRequest(ctx Context, req *gossh.Request) (boo
 		if err := gossh.Unmarshal(req.Payload, &reqPayload); err != nil {
 			// TODO: log parse failure
 			return false, []byte{}
+		}
+		if srv.ReversePortForwardingCallback == nil || !srv.ReversePortForwardingCallback(ctx, reqPayload.BindAddr, reqPayload.BindPort) {
+			return false, []byte("port forwarding is disabled")
 		}
 		addr := net.JoinHostPort(reqPayload.BindAddr, strconv.Itoa(int(reqPayload.BindPort)))
 		ln, err := net.Listen("tcp", addr)
