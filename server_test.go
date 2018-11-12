@@ -73,11 +73,14 @@ func TestServerClose(t *testing.T) {
 		}
 	}()
 
-	doneCh := make(chan struct{})
+	clientDoneChan := make(chan struct{})
+	closeDoneChan := make(chan struct{})
+
 	sess, _, cleanup := newClientSession(t, l.Addr().String(), nil)
 	go func() {
 		defer cleanup()
-		defer close(doneCh)
+		defer close(clientDoneChan)
+		<-closeDoneChan
 		if err := sess.Run(""); err != nil && err != io.EOF {
 			t.Fatal(err)
 		}
@@ -88,6 +91,7 @@ func TestServerClose(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		close(closeDoneChan)
 	}()
 
 	timeout := time.After(100 * time.Millisecond)
@@ -96,7 +100,7 @@ func TestServerClose(t *testing.T) {
 		t.Error("timeout")
 		return
 	case <-s.getDoneChan():
-		<-doneCh
+		<-clientDoneChan
 		return
 	}
 }

@@ -103,7 +103,7 @@ func newContext(srv *Server) (*sshContext, context.CancelFunc) {
 
 // this is separate from newContext because we will get ConnMetadata
 // at different points so it needs to be applied separately
-func (ctx *sshContext) applyConnMetadata(conn gossh.ConnMetadata) {
+func applyConnMetadata(ctx Context, conn gossh.ConnMetadata) {
 	if ctx.Value(ContextKeySessionID) != nil {
 		return
 	}
