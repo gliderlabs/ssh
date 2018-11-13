@@ -77,11 +77,7 @@ type Session interface {
 // when there is no signal channel specified
 const maxSigBufSize = 128
 
-type sessionHandler struct{}
-
-func (_ sessionHandler) HandleChannel(ctx Context, newChan gossh.NewChannel) {
-	srv := ctx.Value(ContextKeyServer).(*Server)
-	conn := ctx.Value(ContextKeyConn).(*gossh.ServerConn)
+func sessionHandler(srv *Server, conn *gossh.ServerConn, newChan gossh.NewChannel, ctx Context) {
 	ch, reqs, err := newChan.Accept()
 	if err != nil {
 		// TODO: trigger event callback
@@ -282,7 +278,7 @@ func (sess *session) handleRequests(reqs <-chan *gossh.Request) {
 			req.Reply(ok, nil)
 		case agentRequestType:
 			// TODO: option/callback to allow agent forwarding
-			setAgentRequested(sess)
+			SetAgentRequested(sess.ctx)
 			req.Reply(true, nil)
 		default:
 			// TODO: debug log

@@ -1,7 +1,6 @@
 package ssh
 
 import (
-	"fmt"
 	"io"
 	"log"
 	"net"
@@ -24,10 +23,7 @@ type localForwardChannelData struct {
 	OriginPort uint32
 }
 
-type directTCPHandler struct{}
-
-func (_ directTCPHandler) HandleChannel(ctx Context, newChan gossh.NewChannel) {
-	srv := ctx.Value(ContextKeyServer).(*Server)
+func directTcpipHandler(srv *Server, conn *gossh.ServerConn, newChan gossh.NewChannel, ctx Context) {
 	d := localForwardChannelData{}
 	if err := gossh.Unmarshal(newChan.ExtraData(), &d); err != nil {
 		newChan.Reject(gossh.ConnectionFailed, "error parsing forward data: "+err.Error())
@@ -39,7 +35,7 @@ func (_ directTCPHandler) HandleChannel(ctx Context, newChan gossh.NewChannel) {
 		return
 	}
 
-	dest := fmt.Sprintf("%s:%d", d.DestAddr, d.DestPort)
+	dest := net.JoinHostPort(d.DestAddr, strconv.FormatInt(int64(d.DestPort), 10))
 
 	var dialer net.Dialer
 	dconn, err := dialer.DialContext(ctx, "tcp", dest)
@@ -93,8 +89,7 @@ type forwardedTCPHandler struct {
 	sync.Mutex
 }
 
-func (h forwardedTCPHandler) HandleRequest(ctx Context, req *gossh.Request) (bool, []byte) {
-	// TODO: RemotePortForwardingCallback
+func (h forwardedTCPHandler) HandleRequest(ctx Context, srv *Server, req *gossh.Request) (bool, []byte) {
 	h.Lock()
 	if h.forwards == nil {
 		h.forwards = make(map[string]net.Listener)
@@ -107,6 +102,9 @@ func (h forwardedTCPHandler) HandleRequest(ctx Context, req *gossh.Request) (boo
 		if err := gossh.Unmarshal(req.Payload, &reqPayload); err != nil {
 			// TODO: log parse failure
 			return false, []byte{}
+		}
+		if srv.ReversePortForwardingCallback == nil || !srv.ReversePortForwardingCallback(ctx, reqPayload.BindAddr, reqPayload.BindPort) {
+			return false, []byte("port forwarding is disabled")
 		}
 		addr := net.JoinHostPort(reqPayload.BindAddr, strconv.Itoa(int(reqPayload.BindPort)))
 		ln, err := net.Listen("tcp", addr)

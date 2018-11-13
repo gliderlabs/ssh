@@ -24,31 +24,32 @@ type Server struct {
 	HostSigners []Signer // private keys for the host key, must have at least one
 	Version     string   // server version to be sent before the initial handshake
 
-	PasswordHandler             PasswordHandler             // password authentication handler
-	PublicKeyHandler            PublicKeyHandler            // public key authentication handler
-	PtyCallback                 PtyCallback                 // callback for allowing PTY sessions, allows all if nil
-	ConnCallback                ConnCallback                // optional callback for wrapping net.Conn before handling
-	LocalPortForwardingCallback LocalPortForwardingCallback // callback for allowing local port forwarding, denies all if nil
+	PasswordHandler               PasswordHandler               // password authentication handler
+	PublicKeyHandler              PublicKeyHandler              // public key authentication handler
+	PtyCallback                   PtyCallback                   // callback for allowing PTY sessions, allows all if nil
+	ConnCallback                  ConnCallback                  // optional callback for wrapping net.Conn before handling
+	LocalPortForwardingCallback   LocalPortForwardingCallback   // callback for allowing local port forwarding, denies all if nil
+	ReversePortForwardingCallback ReversePortForwardingCallback //callback for allowing reverse port forwarding, denies all if nil
 
 	IdleTimeout time.Duration // connection timeout when no activity, none if empty
 	MaxTimeout  time.Duration // absolute connection timeout, none if empty
 
-	channelHandlers map[string]ChannelHandler
+	channelHandlers map[string]channelHandler
 	requestHandlers map[string]RequestHandler
 
-	mu        sync.Mutex
-	listeners map[net.Listener]struct{}
-	conns     map[*gossh.ServerConn]struct{}
-	doneChan  chan struct{}
+	listenerWg sync.WaitGroup
+	mu         sync.Mutex
+	listeners  map[net.Listener]struct{}
+	conns      map[*gossh.ServerConn]struct{}
+	connWg     sync.WaitGroup
+	doneChan   chan struct{}
 }
-
 type RequestHandler interface {
-	HandleRequest(ctx Context, req *gossh.Request) (ok bool, payload []byte)
+	HandleRequest(ctx Context, srv *Server, req *gossh.Request) (ok bool, payload []byte)
 }
 
-type ChannelHandler interface {
-	HandleChannel(ctx Context, newChan gossh.NewChannel)
-}
+// internal for now
+type channelHandler func(srv *Server, conn *gossh.ServerConn, newChan gossh.NewChannel, ctx Context)
 
 func (srv *Server) ensureHostSigner() error {
 	if len(srv.HostSigners) == 0 {
@@ -68,13 +69,13 @@ func (srv *Server) ensureHandlers() {
 		"tcpip-forward":        forwardedTCPHandler{},
 		"cancel-tcpip-forward": forwardedTCPHandler{},
 	}
-	srv.channelHandlers = map[string]ChannelHandler{
-		"session":      sessionHandler{},
-		"direct-tcpip": directTCPHandler{},
+	srv.channelHandlers = map[string]channelHandler{
+		"session":      sessionHandler,
+		"direct-tcpip": directTcpipHandler,
 	}
 }
 
-func (srv *Server) config(ctx *sshContext) *gossh.ServerConfig {
+func (srv *Server) config(ctx Context) *gossh.ServerConfig {
 	config := &gossh.ServerConfig{}
 	for _, signer := range srv.HostSigners {
 		config.AddHostKey(signer)
@@ -87,7 +88,7 @@ func (srv *Server) config(ctx *sshContext) *gossh.ServerConfig {
 	}
 	if srv.PasswordHandler != nil {
 		config.PasswordCallback = func(conn gossh.ConnMetadata, password []byte) (*gossh.Permissions, error) {
-			ctx.applyConnMetadata(conn)
+			applyConnMetadata(ctx, conn)
 			if ok := srv.PasswordHandler(ctx, string(password)); !ok {
 				return ctx.Permissions().Permissions, fmt.Errorf("permission denied")
 			}
@@ -96,7 +97,7 @@ func (srv *Server) config(ctx *sshContext) *gossh.ServerConfig {
 	}
 	if srv.PublicKeyHandler != nil {
 		config.PublicKeyCallback = func(conn gossh.ConnMetadata, key gossh.PublicKey) (*gossh.Permissions, error) {
-			ctx.applyConnMetadata(conn)
+			applyConnMetadata(ctx, conn)
 			if ok := srv.PublicKeyHandler(ctx, key); !ok {
 				return ctx.Permissions().Permissions, fmt.Errorf("permission denied")
 			}
@@ -129,15 +130,6 @@ func (srv *Server) Close() error {
 	return err
 }
 
-// shutdownPollInterval is how often we poll for quiescence
-// during Server.Shutdown. This is lower during tests, to
-// speed up tests.
-// Ideally we could find a solution that doesn't involve polling,
-// but which also doesn't have a high runtime cost (and doesn't
-// involve any contentious mutexes), but that is left as an
-// exercise for the reader.
-var shutdownPollInterval = 500 * time.Millisecond
-
 // Shutdown gracefully shuts down the server without interrupting any
 // active connections. Shutdown works by first closing all open
 // listeners, and then waiting indefinitely for connections to close.
@@ -148,22 +140,20 @@ func (srv *Server) Shutdown(ctx context.Context) error {
 	lnerr := srv.closeListenersLocked()
 	srv.closeDoneChanLocked()
 	srv.mu.Unlock()
-	ticker := time.NewTicker(shutdownPollInterval)
-	defer ticker.Stop()
-	for {
-		srv.mu.Lock()
-		conns := len(srv.conns)
-		srv.mu.Unlock()
-		if conns == 0 {
-			return lnerr
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-ticker.C:
-		}
-	}
 
+	finished := make(chan struct{}, 1)
+	go func() {
+		srv.listenerWg.Wait()
+		srv.connWg.Wait()
+		finished <- struct{}{}
+	}()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-finished:
+		return lnerr
+	}
 }
 
 // Serve accepts incoming connections on the Listener l, creating a new
@@ -179,6 +169,12 @@ func (srv *Server) Serve(l net.Listener) error {
 	}
 	if srv.Handler == nil {
 		srv.Handler = DefaultHandler
+	}
+	if srv.channelHandlers == nil {
+		srv.channelHandlers = map[string]channelHandler{
+			"session":      sessionHandler,
+			"direct-tcpip": directTcpipHandler,
+		}
 	}
 	var tempDelay time.Duration
 
@@ -239,7 +235,8 @@ func (srv *Server) handleConn(newConn net.Conn) {
 	defer srv.trackConn(sshConn, false)
 
 	ctx.SetValue(ContextKeyConn, sshConn)
-	ctx.applyConnMetadata(sshConn)
+	applyConnMetadata(ctx, sshConn)
+	//go gossh.DiscardRequests(reqs)
 	go srv.handleRequests(ctx, reqs)
 	for ch := range chans {
 		handler, found := srv.channelHandlers[ch.ChannelType()]
@@ -247,7 +244,7 @@ func (srv *Server) handleConn(newConn net.Conn) {
 			ch.Reject(gossh.UnknownChannelType, "unsupported channel type")
 			continue
 		}
-		go handler.HandleChannel(ctx, ch)
+		go handler(srv, sshConn, ch, ctx)
 	}
 }
 
@@ -258,8 +255,9 @@ func (srv *Server) handleRequests(ctx Context, in <-chan *gossh.Request) {
 			req.Reply(false, nil)
 			continue
 		}
-		reqCtx, _ := context.WithCancel(ctx)
-		ret, payload := handler.HandleRequest(&sshContext{reqCtx}, req)
+		/*reqCtx, cancel := context.WithCancel(ctx)
+		defer cancel() */
+		ret, payload := handler.HandleRequest(ctx, srv, req)
 		if req.WantReply {
 			req.Reply(ret, payload)
 		}
@@ -344,8 +342,10 @@ func (srv *Server) trackListener(ln net.Listener, add bool) {
 			srv.doneChan = nil
 		}
 		srv.listeners[ln] = struct{}{}
+		srv.listenerWg.Add(1)
 	} else {
 		delete(srv.listeners, ln)
+		srv.listenerWg.Done()
 	}
 }
 
@@ -357,7 +357,9 @@ func (srv *Server) trackConn(c *gossh.ServerConn, add bool) {
 	}
 	if add {
 		srv.conns[c] = struct{}{}
+		srv.connWg.Add(1)
 	} else {
 		delete(srv.conns, c)
+		srv.connWg.Done()
 	}
 }
