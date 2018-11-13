@@ -282,6 +282,7 @@ func (sess *session) handleRequests(reqs <-chan *gossh.Request) {
 			req.Reply(true, nil)
 		default:
 			// TODO: debug log
+			req.Reply(false, nil)
 		}
 	}
 }

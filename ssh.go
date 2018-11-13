@@ -50,6 +50,9 @@ type ConnCallback func(conn net.Conn) net.Conn
 // LocalPortForwardingCallback is a hook for allowing port forwarding
 type LocalPortForwardingCallback func(ctx Context, destinationHost string, destinationPort uint32) bool
 
+// ReversePortForwardingCallback is a hook for allowing reverse port forwarding
+type ReversePortForwardingCallback func(ctx Context, bindHost string, bindPort uint32) bool
+
 // Window represents the size of a PTY window.
 type Window struct {
 	Width  int
