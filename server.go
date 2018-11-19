@@ -34,6 +34,12 @@ type Server struct {
 	IdleTimeout time.Duration // connection timeout when no activity, none if empty
 	MaxTimeout  time.Duration // absolute connection timeout, none if empty
 
+	// Internal x/crypto/ssh config. Note that a number of values in this struct
+	// are overwritten every time a connection starts, so only use this if you
+	// know what you're doing and absolutely need to change the internal config
+	// values.
+	BaseConfig *gossh.ServerConfig
+
 	channelHandlers map[string]channelHandler
 	requestHandlers map[string]RequestHandler
 
@@ -76,7 +82,13 @@ func (srv *Server) ensureHandlers() {
 }
 
 func (srv *Server) config(ctx Context) *gossh.ServerConfig {
-	config := &gossh.ServerConfig{}
+	// Use the provided base config if set, otherwise default to an empty
+	// config.
+	config := srv.BaseConfig
+	if config == nil {
+		config = &gossh.ServerConfig{}
+	}
+
 	for _, signer := range srv.HostSigners {
 		config.AddHostKey(signer)
 	}
@@ -105,6 +117,7 @@ func (srv *Server) config(ctx Context) *gossh.ServerConfig {
 			return ctx.Permissions().Permissions, nil
 		}
 	}
+
 	return config
 }
 
