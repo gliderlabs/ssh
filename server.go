@@ -210,7 +210,7 @@ func (srv *Server) SetChannelHandler(kind string, handler ChannelHandler) {
 	srv.channelHandlers[kind] = handler
 }
 
-func (srv *Server) GetChannelHandler(kind string) ChannelHandler {
+func (srv *Server) ChannelHandler(kind string) ChannelHandler {
 	srv.ensureHandlers()
 	return srv.channelHandlers[kind]
 }
