@@ -2,6 +2,7 @@ package ssh
 
 import (
 	"crypto/subtle"
+	gossh "golang.org/x/crypto/ssh"
 	"net"
 )
 
@@ -38,6 +39,9 @@ type PublicKeyHandler func(ctx Context, key PublicKey) bool
 
 // PasswordHandler is a callback for performing password authentication.
 type PasswordHandler func(ctx Context, password string) bool
+
+// KeyboardInteractiveHandler is a callback for performing keyboard-interactive authentication.
+type KeyboardInteractiveHandler func(ctx Context, challenger gossh.KeyboardInteractiveChallenge) bool
 
 // PtyCallback is a hook for allowing PTY sessions.
 type PtyCallback func(ctx Context, pty Pty) bool

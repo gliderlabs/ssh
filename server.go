@@ -24,6 +24,7 @@ type Server struct {
 	HostSigners []Signer // private keys for the host key, must have at least one
 	Version     string   // server version to be sent before the initial handshake
 
+	KeyboardInteractiveHandler    KeyboardInteractiveHandler    // keyboard-interactive authentication handler
 	PasswordHandler               PasswordHandler               // password authentication handler
 	PublicKeyHandler              PublicKeyHandler              // public key authentication handler
 	PtyCallback                   PtyCallback                   // callback for allowing PTY sessions, allows all if nil
@@ -102,6 +103,14 @@ func (srv *Server) config(ctx Context) *gossh.ServerConfig {
 				return ctx.Permissions().Permissions, fmt.Errorf("permission denied")
 			}
 			ctx.SetValue(ContextKeyPublicKey, key)
+			return ctx.Permissions().Permissions, nil
+		}
+	}
+	if srv.KeyboardInteractiveHandler != nil {
+		config.KeyboardInteractiveCallback = func(conn gossh.ConnMetadata, challenger gossh.KeyboardInteractiveChallenge) (*gossh.Permissions, error) {
+			if ok := srv.KeyboardInteractiveHandler(ctx, challenger); !ok {
+				return ctx.Permissions().Permissions, fmt.Errorf("permission denied")
+			}
 			return ctx.Permissions().Permissions, nil
 		}
 	}
