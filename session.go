@@ -39,6 +39,9 @@ type Session interface {
 	// Exit sends an exit status and then closes the session.
 	Exit(code int) error
 
+	// RawCommand returns the command exactly as the client/user specified it.
+	RawCommand() string
+
 	// Command returns a shell parsed slice of arguments that were provided by the
 	// user. Shell parsing splits the command string according to POSIX shell rules,
 	// which considers quoting not just whitespace.
@@ -104,6 +107,7 @@ type session struct {
 	winch   chan Window
 	env     []string
 	ptyCb   PtyCallback
+	rawCmd  string
 	cmd     []string
 	ctx     Context
 	sigCh   chan<- Signal
@@ -175,6 +179,10 @@ func (sess *session) LocalAddr() net.Addr {
 
 func (sess *session) Environ() []string {
 	return append([]string(nil), sess.env...)
+}
+
+func (sess *session) RawCommand() string {
+	return sess.rawCmd
 }
 
 func (sess *session) Command() []string {
