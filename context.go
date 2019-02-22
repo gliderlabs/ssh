@@ -93,12 +93,12 @@ type Context interface {
 
 type sshContext struct {
 	context.Context
-	sync.Mutex
+	*sync.Mutex
 }
 
 func newContext(srv *Server) (*sshContext, context.CancelFunc) {
 	innerCtx, cancel := context.WithCancel(context.Background())
-	ctx := &sshContext{innerCtx, sync.Mutex{}}
+	ctx := &sshContext{innerCtx, &sync.Mutex{}}
 	ctx.SetValue(ContextKeyServer, srv)
 	perms := &Permissions{&gossh.Permissions{}}
 	ctx.SetValue(ContextKeyPermissions, perms)
