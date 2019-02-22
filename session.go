@@ -88,7 +88,7 @@ func sessionHandler(srv *Server, conn *gossh.ServerConn, newChan gossh.NewChanne
 		conn:      conn,
 		handler:   srv.Handler,
 		ptyCb:     srv.PtyCallback,
-		sessPolCb: srv.SessionPolicyCallback,
+		sessReqCb: srv.SessionRequestCallback,
 		ctx:       ctx,
 	}
 	sess.handleRequests(reqs)
@@ -105,7 +105,7 @@ type session struct {
 	winch     chan Window
 	env       []string
 	ptyCb     PtyCallback
-	sessPolCb SessionPolicyCallback
+	sessReqCb SessionRequestCallback
 	cmd       []string
 	ctx       Context
 	sigCh     chan<- Signal
@@ -218,7 +218,7 @@ func (sess *session) handleRequests(reqs <-chan *gossh.Request) {
 
 			// If there's a session policy callback, we need to confirm before
 			// accepting the session.
-			if sess.sessPolCb != nil && !sess.sessPolCb(sess, req.Type) {
+			if sess.sessReqCb != nil && !sess.sessReqCb(sess, req.Type) {
 				sess.cmd = nil
 				req.Reply(false, nil)
 				continue
@@ -294,6 +294,7 @@ func (sess *session) handleRequests(reqs <-chan *gossh.Request) {
 			req.Reply(true, nil)
 		default:
 			// TODO: debug log
+			req.Reply(false, nil)
 		}
 	}
 }

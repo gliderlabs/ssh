@@ -24,17 +24,21 @@ type Server struct {
 	HostSigners []Signer // private keys for the host key, must have at least one
 	Version     string   // server version to be sent before the initial handshake
 
-	PasswordHandler             PasswordHandler             // password authentication handler
-	PublicKeyHandler            PublicKeyHandler            // public key authentication handler
-	PtyCallback                 PtyCallback                 // callback for allowing PTY sessions, allows all if nil
-	ConnCallback                ConnCallback                // optional callback for wrapping net.Conn before handling
-	LocalPortForwardingCallback LocalPortForwardingCallback // callback for allowing local port forwarding, denies all if nil
-	SessionPolicyCallback       SessionPolicyCallback
+	KeyboardInteractiveHandler    KeyboardInteractiveHandler    // keyboard-interactive authentication handler
+	PasswordHandler               PasswordHandler               // password authentication handler
+	PublicKeyHandler              PublicKeyHandler              // public key authentication handler
+	PtyCallback                   PtyCallback                   // callback for allowing PTY sessions, allows all if nil
+	ConnCallback                  ConnCallback                  // optional callback for wrapping net.Conn before handling
+	LocalPortForwardingCallback   LocalPortForwardingCallback   // callback for allowing local port forwarding, denies all if nil
+	ReversePortForwardingCallback ReversePortForwardingCallback // callback for allowing reverse port forwarding, denies all if nil
+	DefaultServerConfigCallback   DefaultServerConfigCallback   // callback for configuring detailed SSH options
+	SessionRequestCallback  SessionRequestCallback  // callback for allowing or denying SSH sessions
 
 	IdleTimeout time.Duration // connection timeout when no activity, none if empty
 	MaxTimeout  time.Duration // absolute connection timeout, none if empty
 
 	channelHandlers map[string]channelHandler
+	requestHandlers map[string]RequestHandler
 
 	listenerWg sync.WaitGroup
 	mu         sync.Mutex
@@ -42,6 +46,9 @@ type Server struct {
 	conns      map[*gossh.ServerConn]struct{}
 	connWg     sync.WaitGroup
 	doneChan   chan struct{}
+}
+type RequestHandler interface {
+	HandleRequest(ctx Context, srv *Server, req *gossh.Request) (ok bool, payload []byte)
 }
 
 // internal for now
@@ -58,8 +65,26 @@ func (srv *Server) ensureHostSigner() error {
 	return nil
 }
 
+func (srv *Server) ensureHandlers() {
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+	srv.requestHandlers = map[string]RequestHandler{
+		"tcpip-forward":        forwardedTCPHandler{},
+		"cancel-tcpip-forward": forwardedTCPHandler{},
+	}
+	srv.channelHandlers = map[string]channelHandler{
+		"session":      sessionHandler,
+		"direct-tcpip": directTcpipHandler,
+	}
+}
+
 func (srv *Server) config(ctx Context) *gossh.ServerConfig {
-	config := &gossh.ServerConfig{}
+	var config *gossh.ServerConfig
+	if srv.DefaultServerConfigCallback == nil {
+		config = &gossh.ServerConfig{}
+	} else {
+		config = srv.DefaultServerConfigCallback(ctx)
+	}
 	for _, signer := range srv.HostSigners {
 		config.AddHostKey(signer)
 	}
@@ -85,6 +110,14 @@ func (srv *Server) config(ctx Context) *gossh.ServerConfig {
 				return ctx.Permissions().Permissions, fmt.Errorf("permission denied")
 			}
 			ctx.SetValue(ContextKeyPublicKey, key)
+			return ctx.Permissions().Permissions, nil
+		}
+	}
+	if srv.KeyboardInteractiveHandler != nil {
+		config.KeyboardInteractiveCallback = func(conn gossh.ConnMetadata, challenger gossh.KeyboardInteractiveChallenge) (*gossh.Permissions, error) {
+			if ok := srv.KeyboardInteractiveHandler(ctx, challenger); !ok {
+				return ctx.Permissions().Permissions, fmt.Errorf("permission denied")
+			}
 			return ctx.Permissions().Permissions, nil
 		}
 	}
@@ -145,6 +178,7 @@ func (srv *Server) Shutdown(ctx context.Context) error {
 //
 // Serve always returns a non-nil error.
 func (srv *Server) Serve(l net.Listener) error {
+	srv.ensureHandlers()
 	defer l.Close()
 	if err := srv.ensureHostSigner(); err != nil {
 		return err
@@ -218,7 +252,8 @@ func (srv *Server) handleConn(newConn net.Conn) {
 
 	ctx.SetValue(ContextKeyConn, sshConn)
 	applyConnMetadata(ctx, sshConn)
-	go gossh.DiscardRequests(reqs)
+	//go gossh.DiscardRequests(reqs)
+	go srv.handleRequests(ctx, reqs)
 	for ch := range chans {
 		handler, found := srv.channelHandlers[ch.ChannelType()]
 		if !found {
@@ -226,6 +261,22 @@ func (srv *Server) handleConn(newConn net.Conn) {
 			continue
 		}
 		go handler(srv, sshConn, ch, ctx)
+	}
+}
+
+func (srv *Server) handleRequests(ctx Context, in <-chan *gossh.Request) {
+	for req := range in {
+		handler, found := srv.requestHandlers[req.Type]
+		if !found && req.WantReply {
+			req.Reply(false, nil)
+			continue
+		}
+		/*reqCtx, cancel := context.WithCancel(ctx)
+		defer cancel() */
+		ret, payload := handler.HandleRequest(ctx, srv, req)
+		if req.WantReply {
+			req.Reply(ret, payload)
+		}
 	}
 }
 

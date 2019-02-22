@@ -1,5 +1,4 @@
 /*
-
 Package ssh wraps the crypto/ssh package with a higher-level API for building
 SSH servers. The goal of the API was to make it as simple as using net/http, so
 the API is very similar.
@@ -42,6 +41,5 @@ exposed to you via the Session interface.
 
 The one big feature missing from the Session abstraction is signals. This was
 started, but not completed. Pull Requests welcome!
-
 */
 package ssh
