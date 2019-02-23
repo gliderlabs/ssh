@@ -2,8 +2,9 @@ package ssh
 
 import (
 	"crypto/subtle"
-	gossh "golang.org/x/crypto/ssh"
 	"net"
+
+	gossh "golang.org/x/crypto/ssh"
 )
 
 type Signal string
@@ -45,6 +46,9 @@ type KeyboardInteractiveHandler func(ctx Context, challenger gossh.KeyboardInter
 
 // PtyCallback is a hook for allowing PTY sessions.
 type PtyCallback func(ctx Context, pty Pty) bool
+
+// SessionRequestCallback is a callback for allowing or denying SSH sessions.
+type SessionRequestCallback func(sess Session, requestType string) bool
 
 // ConnCallback is a hook for new connections before handling.
 // It allows wrapping for timeouts and limiting by returning

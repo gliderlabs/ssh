@@ -32,6 +32,7 @@ type Server struct {
 	LocalPortForwardingCallback   LocalPortForwardingCallback   // callback for allowing local port forwarding, denies all if nil
 	ReversePortForwardingCallback ReversePortForwardingCallback // callback for allowing reverse port forwarding, denies all if nil
 	DefaultServerConfigCallback   DefaultServerConfigCallback   // callback for configuring detailed SSH options
+	SessionRequestCallback  SessionRequestCallback  // callback for allowing or denying SSH sessions
 
 	IdleTimeout time.Duration // connection timeout when no activity, none if empty
 	MaxTimeout  time.Duration // absolute connection timeout, none if empty
