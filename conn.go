@@ -44,7 +44,7 @@ func (c *serverConn) updateDeadline() {
 	switch {
 	case c.idleTimeout > 0:
 		idleDeadline := time.Now().Add(c.idleTimeout)
-		if idleDeadline.Unix() < c.maxDeadline.Unix() {
+		if idleDeadline.Unix() < c.maxDeadline.Unix() || c.maxDeadline.IsZero() {
 			c.Conn.SetDeadline(idleDeadline)
 			return
 		}
