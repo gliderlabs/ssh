@@ -32,7 +32,7 @@ type Server struct {
 	LocalPortForwardingCallback   LocalPortForwardingCallback   // callback for allowing local port forwarding, denies all if nil
 	ReversePortForwardingCallback ReversePortForwardingCallback // callback for allowing reverse port forwarding, denies all if nil
 	DefaultServerConfigCallback   DefaultServerConfigCallback   // callback for configuring detailed SSH options
-	SessionRequestCallback  SessionRequestCallback  // callback for allowing or denying SSH sessions
+	SessionRequestCallback        SessionRequestCallback        // callback for allowing or denying SSH sessions
 
 	IdleTimeout time.Duration // connection timeout when no activity, none if empty
 	MaxTimeout  time.Duration // absolute connection timeout, none if empty
@@ -267,8 +267,10 @@ func (srv *Server) handleConn(newConn net.Conn) {
 func (srv *Server) handleRequests(ctx Context, in <-chan *gossh.Request) {
 	for req := range in {
 		handler, found := srv.requestHandlers[req.Type]
-		if !found && req.WantReply {
-			req.Reply(false, nil)
+		if !found {
+			if req.WantReply {
+				req.Reply(false, nil)
+			}
 			continue
 		}
 		/*reqCtx, cancel := context.WithCancel(ctx)
