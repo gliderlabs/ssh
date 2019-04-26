@@ -84,13 +84,14 @@ func sessionHandler(srv *Server, conn *gossh.ServerConn, newChan gossh.NewChanne
 		return
 	}
 	sess := &session{
-		Channel:           ch,
-		conn:              conn,
-		handler:           srv.Handler,
+		Channel:   ch,
+		conn:      conn,
+		handler:   srv.Handler,
+		ptyCb:     srv.PtyCallback,
+		sessReqCb: srv.SessionRequestCallback,
+		ctx:       ctx,
+
 		subsystemHandlers: srv.SubsystemHandlers,
-		ptyCb:             srv.PtyCallback,
-		sessReqCb:         srv.SessionRequestCallback,
-		ctx:               ctx,
 	}
 	sess.handleRequests(reqs)
 }
@@ -98,20 +99,21 @@ func sessionHandler(srv *Server, conn *gossh.ServerConn, newChan gossh.NewChanne
 type session struct {
 	sync.Mutex
 	gossh.Channel
-	conn              *gossh.ServerConn
-	handler           Handler
+	conn      *gossh.ServerConn
+	handler   Handler
+	handled   bool
+	exited    bool
+	pty       *Pty
+	winch     chan Window
+	env       []string
+	ptyCb     PtyCallback
+	sessReqCb SessionRequestCallback
+	cmd       []string
+	ctx       Context
+	sigCh     chan<- Signal
+	sigBuf    []Signal
+
 	subsystemHandlers map[string]SubsystemHandler
-	handled           bool
-	exited            bool
-	pty               *Pty
-	winch             chan Window
-	env               []string
-	ptyCb             PtyCallback
-	sessReqCb         SessionRequestCallback
-	cmd               []string
-	ctx               Context
-	sigCh             chan<- Signal
-	sigBuf            []Signal
 }
 
 func (sess *session) Write(p []byte) (n int, err error) {
