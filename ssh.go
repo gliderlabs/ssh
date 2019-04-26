@@ -2,8 +2,9 @@ package ssh
 
 import (
 	"crypto/subtle"
-	gossh "golang.org/x/crypto/ssh"
 	"net"
+
+	gossh "golang.org/x/crypto/ssh"
 )
 
 type Signal string
@@ -46,6 +47,9 @@ type KeyboardInteractiveHandler func(ctx Context, challenger gossh.KeyboardInter
 // PtyCallback is a hook for allowing PTY sessions.
 type PtyCallback func(ctx Context, pty Pty) bool
 
+// SessionRequestCallback is a callback for allowing or denying SSH sessions.
+type SessionRequestCallback func(sess Session, requestType string) bool
+
 // ConnCallback is a hook for new connections before handling.
 // It allows wrapping for timeouts and limiting by returning
 // the net.Conn that will be used as the underlying connection.
@@ -56,6 +60,9 @@ type LocalPortForwardingCallback func(ctx Context, destinationHost string, desti
 
 // ReversePortForwardingCallback is a hook for allowing reverse port forwarding
 type ReversePortForwardingCallback func(ctx Context, bindHost string, bindPort uint32) bool
+
+// DefaultServerConfigCallback is a hook for creating custom default server configs
+type DefaultServerConfigCallback func(ctx Context) *gossh.ServerConfig
 
 // Window represents the size of a PTY window.
 type Window struct {
