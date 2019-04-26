@@ -35,6 +35,7 @@ type Option func(*Server) error
 // Handler is a callback for handling established SSH sessions.
 type Handler func(Session)
 
+// SubsystemHandler is a callback for handling session subsystem request
 type SubsystemHandler func(Session)
 
 // PublicKeyHandler is a callback for performing public key authentication.

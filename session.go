@@ -87,13 +87,14 @@ func DefaultSessionHandler(srv *Server, conn *gossh.ServerConn, newChan gossh.Ne
 		return
 	}
 	sess := &session{
-		Channel:           ch,
-		conn:              conn,
-		handler:           srv.Handler,
+		Channel:   ch,
+		conn:      conn,
+		handler:   srv.Handler,
+		ptyCb:     srv.PtyCallback,
+		sessReqCb: srv.SessionRequestCallback,
+		ctx:       ctx,
+
 		subsystemHandlers: srv.SubsystemHandlers,
-		ptyCb:             srv.PtyCallback,
-		sessReqCb:         srv.SessionRequestCallback,
-		ctx:               ctx,
 	}
 	sess.handleRequests(reqs)
 }
