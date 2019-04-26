@@ -84,12 +84,13 @@ func sessionHandler(srv *Server, conn *gossh.ServerConn, newChan gossh.NewChanne
 		return
 	}
 	sess := &session{
-		Channel:   ch,
-		conn:      conn,
-		handler:   srv.Handler,
-		ptyCb:     srv.PtyCallback,
-		sessReqCb: srv.SessionRequestCallback,
-		ctx:       ctx,
+		Channel:           ch,
+		conn:              conn,
+		handler:           srv.Handler,
+		subsystemHandlers: srv.SubsystemHandlers,
+		ptyCb:             srv.PtyCallback,
+		sessReqCb:         srv.SessionRequestCallback,
+		ctx:               ctx,
 	}
 	sess.handleRequests(reqs)
 }
@@ -97,19 +98,20 @@ func sessionHandler(srv *Server, conn *gossh.ServerConn, newChan gossh.NewChanne
 type session struct {
 	sync.Mutex
 	gossh.Channel
-	conn      *gossh.ServerConn
-	handler   Handler
-	handled   bool
-	exited    bool
-	pty       *Pty
-	winch     chan Window
-	env       []string
-	ptyCb     PtyCallback
-	sessReqCb SessionRequestCallback
-	cmd       []string
-	ctx       Context
-	sigCh     chan<- Signal
-	sigBuf    []Signal
+	conn              *gossh.ServerConn
+	handler           Handler
+	subsystemHandlers map[string]SubsystemHandler
+	handled           bool
+	exited            bool
+	pty               *Pty
+	winch             chan Window
+	env               []string
+	ptyCb             PtyCallback
+	sessReqCb         SessionRequestCallback
+	cmd               []string
+	ctx               Context
+	sigCh             chan<- Signal
+	sigBuf            []Signal
 }
 
 func (sess *session) Write(p []byte) (n int, err error) {
@@ -292,6 +294,20 @@ func (sess *session) handleRequests(reqs <-chan *gossh.Request) {
 			// TODO: option/callback to allow agent forwarding
 			SetAgentRequested(sess.ctx)
 			req.Reply(true, nil)
+		case "subsystem":
+			subname := string(req.Payload[4:])
+			handler, ok := sess.subsystemHandlers[subname]
+			if !ok {
+				req.Reply(false, nil)
+			}
+			sess.handled = true
+			req.Reply(true, nil)
+
+			go func() {
+				handler(sess)
+				sess.Exit(0)
+			}()
+
 		default:
 			// TODO: debug log
 			req.Reply(false, nil)
