@@ -206,6 +206,20 @@ func (sess *session) Signals(c chan<- Signal) {
 func (sess *session) handleRequests(reqs <-chan *gossh.Request) {
 	for req := range reqs {
 		switch req.Type {
+		case "subsystem":
+			var ok bool
+			if string(req.Payload[4:]) == "sftp" {
+				ok = true
+			}
+			req.Reply(ok, nil)
+
+			var payload = struct{ Value string }{}
+			gossh.Unmarshal(req.Payload, &payload)
+			sess.cmd, _ = shlex.Split(payload.Value, true)
+			go func() {
+				sess.handler(sess)
+				sess.Exit(0)
+			}()
 		case "shell", "exec":
 			if sess.handled {
 				req.Reply(false, nil)
