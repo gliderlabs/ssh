@@ -47,11 +47,26 @@ type Server struct {
 	connWg     sync.WaitGroup
 	doneChan   chan struct{}
 }
+
 type RequestHandler interface {
-	HandleRequest(ctx Context, srv *Server, req *gossh.Request) (ok bool, payload []byte)
+	HandleSSHRequest(ctx Context, srv *Server, req *gossh.Request) (ok bool, payload []byte)
 }
 
-type ChannelHandler func(srv *Server, conn *gossh.ServerConn, newChan gossh.NewChannel, ctx Context)
+type RequestHandlerFunc func(ctx Context, srv *Server, req *gossh.Request) (ok bool, payload []byte)
+
+func (f RequestHandlerFunc) HandleSSHRequest(ctx Context, srv *Server, req *gossh.Request) (ok bool, payload []byte) {
+	return f(ctx, srv, req)
+}
+
+type ChannelHandler interface {
+	HandleSSHChannel(srv *Server, conn *gossh.ServerConn, newChan gossh.NewChannel, ctx Context)
+}
+
+type ChannelHandlerFunc func(srv *Server, conn *gossh.ServerConn, newChan gossh.NewChannel, ctx Context)
+
+func (f ChannelHandlerFunc) HandleSSHChannel(srv *Server, conn *gossh.ServerConn, newChan gossh.NewChannel, ctx Context) {
+	f(srv, conn, newChan, ctx)
+}
 
 func (srv *Server) ensureHostSigner() error {
 	if len(srv.HostSigners) == 0 {
@@ -75,8 +90,8 @@ func (srv *Server) ensureHandlers() {
 	}
 	if srv.channelHandlers == nil {
 		srv.channelHandlers = map[string]ChannelHandler{
-			"session":      sessionHandler,
-			"direct-tcpip": directTcpipHandler,
+			"session":      ChannelHandlerFunc(sessionHandler),
+			"direct-tcpip": ChannelHandlerFunc(directTcpipHandler),
 		}
 	}
 }
@@ -274,7 +289,7 @@ func (srv *Server) handleConn(newConn net.Conn) {
 			ch.Reject(gossh.UnknownChannelType, "unsupported channel type")
 			continue
 		}
-		go handler(srv, sshConn, ch, ctx)
+		go handler.HandleSSHChannel(srv, sshConn, ch, ctx)
 	}
 }
 
@@ -289,7 +304,7 @@ func (srv *Server) handleRequests(ctx Context, in <-chan *gossh.Request) {
 		}
 		/*reqCtx, cancel := context.WithCancel(ctx)
 		defer cancel() */
-		ret, payload := handler.HandleRequest(ctx, srv, req)
+		ret, payload := handler.HandleSSHRequest(ctx, srv, req)
 		if req.WantReply {
 			req.Reply(ret, payload)
 		}
