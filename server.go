@@ -293,17 +293,13 @@ func (srv *Server) handleRequests(ctx Context, in <-chan *gossh.Request) {
 			handler = srv.RequestHandlers["default"]
 		}
 		if handler == nil {
-			if req.WantReply {
-				req.Reply(false, nil)
-			}
+			req.Reply(false, nil)
 			continue
 		}
 		/*reqCtx, cancel := context.WithCancel(ctx)
 		defer cancel() */
 		ret, payload := handler.HandleSSHRequest(ctx, srv, req)
-		if req.WantReply {
-			req.Reply(ret, payload)
-		}
+		req.Reply(ret, payload)
 	}
 }
 
