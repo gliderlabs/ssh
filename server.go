@@ -65,6 +65,8 @@ func (f RequestHandlerFunc) HandleSSHRequest(ctx Context, srv *Server, req *goss
 	return f(ctx, srv, req)
 }
 
+var DefaultRequestHandlers = map[string]RequestHandler{}
+
 type ChannelHandler interface {
 	HandleSSHChannel(srv *Server, conn *gossh.ServerConn, newChan gossh.NewChannel, ctx Context)
 }
@@ -73,6 +75,10 @@ type ChannelHandlerFunc func(srv *Server, conn *gossh.ServerConn, newChan gossh.
 
 func (f ChannelHandlerFunc) HandleSSHChannel(srv *Server, conn *gossh.ServerConn, newChan gossh.NewChannel, ctx Context) {
 	f(srv, conn, newChan, ctx)
+}
+
+var DefaultChannelHandlers = map[string]ChannelHandler{
+	"session": ChannelHandlerFunc(DefaultSessionHandler),
 }
 
 func (srv *Server) ensureHostSigner() error {
@@ -90,15 +96,15 @@ func (srv *Server) ensureHandlers() {
 	srv.mu.Lock()
 	defer srv.mu.Unlock()
 	if srv.RequestHandlers == nil {
-		srv.RequestHandlers = map[string]RequestHandler{
-			"tcpip-forward":        forwardedTCPHandler{},
-			"cancel-tcpip-forward": forwardedTCPHandler{},
+		srv.RequestHandlers = map[string]RequestHandler{}
+		for k, v := range DefaultRequestHandlers {
+			srv.RequestHandlers[k] = v
 		}
 	}
 	if srv.ChannelHandlers == nil {
-		srv.ChannelHandlers = map[string]ChannelHandler{
-			"session":      ChannelHandlerFunc(sessionHandler),
-			"direct-tcpip": ChannelHandlerFunc(directTcpipHandler),
+		srv.ChannelHandlers = map[string]ChannelHandler{}
+		for k, v := range DefaultChannelHandlers {
+			srv.ChannelHandlers[k] = v
 		}
 	}
 }
