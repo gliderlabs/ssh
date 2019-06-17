@@ -89,7 +89,7 @@ type forwardedTCPHandler struct {
 	sync.Mutex
 }
 
-func (h forwardedTCPHandler) HandleRequest(ctx Context, srv *Server, req *gossh.Request) (bool, []byte) {
+func (h *forwardedTCPHandler) HandleRequest(ctx Context, srv *Server, req *gossh.Request) (bool, []byte) {
 	h.Lock()
 	if h.forwards == nil {
 		h.forwards = make(map[string]net.Listener)

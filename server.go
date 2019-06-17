@@ -69,8 +69,8 @@ func (srv *Server) ensureHandlers() {
 	srv.mu.Lock()
 	defer srv.mu.Unlock()
 	srv.requestHandlers = map[string]RequestHandler{
-		"tcpip-forward":        forwardedTCPHandler{},
-		"cancel-tcpip-forward": forwardedTCPHandler{},
+		"tcpip-forward":        &forwardedTCPHandler{},
+		"cancel-tcpip-forward": &forwardedTCPHandler{},
 	}
 	srv.channelHandlers = map[string]channelHandler{
 		"session":      sessionHandler,
