@@ -68,9 +68,10 @@ func (srv *Server) ensureHostSigner() error {
 func (srv *Server) ensureHandlers() {
 	srv.mu.Lock()
 	defer srv.mu.Unlock()
+	forwardTCPHandler := &forwardedTCPHandler{}
 	srv.requestHandlers = map[string]RequestHandler{
-		"tcpip-forward":        &forwardedTCPHandler{},
-		"cancel-tcpip-forward": &forwardedTCPHandler{},
+		"tcpip-forward":        forwardTCPHandler,
+		"cancel-tcpip-forward": forwardTCPHandler,
 	}
 	srv.channelHandlers = map[string]channelHandler{
 		"session":      sessionHandler,
