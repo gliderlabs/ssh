@@ -15,6 +15,16 @@ import (
 // and ListenAndServeTLS methods after a call to Shutdown or Close.
 var ErrServerClosed = errors.New("ssh: Server closed")
 
+type RequestHandler func(ctx Context, srv *Server, req *gossh.Request) (ok bool, payload []byte)
+
+var DefaultRequestHandlers = map[string]RequestHandler{}
+
+type ChannelHandler func(srv *Server, conn *gossh.ServerConn, newChan gossh.NewChannel, ctx Context)
+
+var DefaultChannelHandlers = map[string]ChannelHandler{
+	"session": DefaultSessionHandler,
+}
+
 // Server defines parameters for running an SSH server. The zero value for
 // Server is a valid configuration. When both PasswordHandler and
 // PublicKeyHandler are nil, no client authentication is performed.
@@ -53,32 +63,6 @@ type Server struct {
 	conns      map[*gossh.ServerConn]struct{}
 	connWg     sync.WaitGroup
 	doneChan   chan struct{}
-}
-
-type RequestHandler interface {
-	HandleSSHRequest(ctx Context, srv *Server, req *gossh.Request) (ok bool, payload []byte)
-}
-
-type RequestHandlerFunc func(ctx Context, srv *Server, req *gossh.Request) (ok bool, payload []byte)
-
-func (f RequestHandlerFunc) HandleSSHRequest(ctx Context, srv *Server, req *gossh.Request) (ok bool, payload []byte) {
-	return f(ctx, srv, req)
-}
-
-var DefaultRequestHandlers = map[string]RequestHandler{}
-
-type ChannelHandler interface {
-	HandleSSHChannel(srv *Server, conn *gossh.ServerConn, newChan gossh.NewChannel, ctx Context)
-}
-
-type ChannelHandlerFunc func(srv *Server, conn *gossh.ServerConn, newChan gossh.NewChannel, ctx Context)
-
-func (f ChannelHandlerFunc) HandleSSHChannel(srv *Server, conn *gossh.ServerConn, newChan gossh.NewChannel, ctx Context) {
-	f(srv, conn, newChan, ctx)
-}
-
-var DefaultChannelHandlers = map[string]ChannelHandler{
-	"session": ChannelHandlerFunc(DefaultSessionHandler),
 }
 
 func (srv *Server) ensureHostSigner() error {
@@ -288,7 +272,7 @@ func (srv *Server) handleConn(newConn net.Conn) {
 			ch.Reject(gossh.UnknownChannelType, "unsupported channel type")
 			continue
 		}
-		go handler.HandleSSHChannel(srv, sshConn, ch, ctx)
+		go handler(srv, sshConn, ch, ctx)
 	}
 }
 
@@ -304,7 +288,7 @@ func (srv *Server) handleRequests(ctx Context, in <-chan *gossh.Request) {
 		}
 		/*reqCtx, cancel := context.WithCancel(ctx)
 		defer cancel() */
-		ret, payload := handler.HandleSSHRequest(ctx, srv, req)
+		ret, payload := handler(ctx, srv, req)
 		req.Reply(ret, payload)
 	}
 }

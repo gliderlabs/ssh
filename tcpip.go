@@ -87,8 +87,8 @@ type remoteForwardChannelData struct {
 }
 
 // ForwardedTCPHandler can be enabled by creating a ForwardedTCPHandler and
-// adding it to the server's RequestHandlers under tcpip-forward and
-// cancel-tcpip-forward.
+// adding the HandleSSHRequest callback to the server's RequestHandlers under
+// tcpip-forward and cancel-tcpip-forward.
 type ForwardedTCPHandler struct {
 	forwards map[string]net.Listener
 	sync.Mutex
