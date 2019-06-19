@@ -95,7 +95,7 @@ func (srv *Server) ensureHandlers() {
 
 func (srv *Server) config(ctx Context) *gossh.ServerConfig {
 	var config *gossh.ServerConfig
-	if srv.DefaultServerConfigCallback == nil {
+	if srv.ServerConfigCallback == nil {
 		config = &gossh.ServerConfig{}
 	} else {
 		config = srv.ServerConfigCallback(ctx)
