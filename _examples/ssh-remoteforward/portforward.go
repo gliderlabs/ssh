@@ -11,6 +11,8 @@ func main() {
 
 	log.Println("starting ssh server on port 2222...")
 
+	forwardHandler := &ssh.ForwardedTCPHandler{}
+
 	server := ssh.Server{
 		LocalPortForwardingCallback: ssh.LocalPortForwardingCallback(func(ctx ssh.Context, dhost string, dport uint32) bool {
 			log.Println("Accepted forward", dhost, dport)
@@ -25,6 +27,10 @@ func main() {
 			log.Println("attempt to bind", host, port, "granted")
 			return true
 		}),
+		RequestHandlers: map[string]ssh.RequestHandler{
+			"tcpip-forward":        forwardHandler.HandleSSHRequest,
+			"cancel-tcpip-forward": forwardHandler.HandleSSHRequest,
+		},
 	}
 
 	log.Fatal(server.ListenAndServe())
