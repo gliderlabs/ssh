@@ -41,7 +41,7 @@ type Server struct {
 	ConnCallback                  ConnCallback                  // optional callback for wrapping net.Conn before handling
 	LocalPortForwardingCallback   LocalPortForwardingCallback   // callback for allowing local port forwarding, denies all if nil
 	ReversePortForwardingCallback ReversePortForwardingCallback // callback for allowing reverse port forwarding, denies all if nil
-	DefaultServerConfigCallback   DefaultServerConfigCallback   // callback for configuring detailed SSH options
+	ServerConfigCallback          ServerConfigCallback          // callback for configuring detailed SSH options
 	SessionRequestCallback        SessionRequestCallback        // callback for allowing or denying SSH sessions
 
 	IdleTimeout time.Duration // connection timeout when no activity, none if empty
@@ -98,7 +98,7 @@ func (srv *Server) config(ctx Context) *gossh.ServerConfig {
 	if srv.DefaultServerConfigCallback == nil {
 		config = &gossh.ServerConfig{}
 	} else {
-		config = srv.DefaultServerConfigCallback(ctx)
+		config = srv.ServerConfigCallback(ctx)
 	}
 	for _, signer := range srv.HostSigners {
 		config.AddHostKey(signer)
