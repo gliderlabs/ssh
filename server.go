@@ -130,6 +130,7 @@ func (srv *Server) config(ctx Context) *gossh.ServerConfig {
 	}
 	if srv.KeyboardInteractiveHandler != nil {
 		config.KeyboardInteractiveCallback = func(conn gossh.ConnMetadata, challenger gossh.KeyboardInteractiveChallenge) (*gossh.Permissions, error) {
+			applyConnMetadata(ctx, conn)
 			if ok := srv.KeyboardInteractiveHandler(ctx, challenger); !ok {
 				return ctx.Permissions().Permissions, fmt.Errorf("permission denied")
 			}
