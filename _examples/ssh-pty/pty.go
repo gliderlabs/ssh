@@ -37,6 +37,7 @@ func main() {
 				io.Copy(f, s) // stdin
 			}()
 			io.Copy(s, f) // stdout
+			cmd.Wait()
 		} else {
 			io.WriteString(s, "No PTY requested.\n")
 			s.Exit(1)

@@ -15,6 +15,16 @@ import (
 // and ListenAndServeTLS methods after a call to Shutdown or Close.
 var ErrServerClosed = errors.New("ssh: Server closed")
 
+type RequestHandler func(ctx Context, srv *Server, req *gossh.Request) (ok bool, payload []byte)
+
+var DefaultRequestHandlers = map[string]RequestHandler{}
+
+type ChannelHandler func(srv *Server, conn *gossh.ServerConn, newChan gossh.NewChannel, ctx Context)
+
+var DefaultChannelHandlers = map[string]ChannelHandler{
+	"session": DefaultSessionHandler,
+}
+
 // Server defines parameters for running an SSH server. The zero value for
 // Server is a valid configuration. When both PasswordHandler and
 // PublicKeyHandler are nil, no client authentication is performed.
@@ -24,16 +34,28 @@ type Server struct {
 	HostSigners []Signer // private keys for the host key, must have at least one
 	Version     string   // server version to be sent before the initial handshake
 
-	PasswordHandler             PasswordHandler             // password authentication handler
-	PublicKeyHandler            PublicKeyHandler            // public key authentication handler
-	PtyCallback                 PtyCallback                 // callback for allowing PTY sessions, allows all if nil
-	ConnCallback                ConnCallback                // optional callback for wrapping net.Conn before handling
-	LocalPortForwardingCallback LocalPortForwardingCallback // callback for allowing local port forwarding, denies all if nil
+	KeyboardInteractiveHandler    KeyboardInteractiveHandler    // keyboard-interactive authentication handler
+	PasswordHandler               PasswordHandler               // password authentication handler
+	PublicKeyHandler              PublicKeyHandler              // public key authentication handler
+	PtyCallback                   PtyCallback                   // callback for allowing PTY sessions, allows all if nil
+	ConnCallback                  ConnCallback                  // optional callback for wrapping net.Conn before handling
+	LocalPortForwardingCallback   LocalPortForwardingCallback   // callback for allowing local port forwarding, denies all if nil
+	ReversePortForwardingCallback ReversePortForwardingCallback // callback for allowing reverse port forwarding, denies all if nil
+	ServerConfigCallback          ServerConfigCallback          // callback for configuring detailed SSH options
+	SessionRequestCallback        SessionRequestCallback        // callback for allowing or denying SSH sessions
 
 	IdleTimeout time.Duration // connection timeout when no activity, none if empty
 	MaxTimeout  time.Duration // absolute connection timeout, none if empty
 
-	channelHandlers map[string]channelHandler
+	// ChannelHandlers allow overriding the built-in session handlers or provide
+	// extensions to the protocol, such as tcpip forwarding. By default only the
+	// "session" handler is enabled.
+	ChannelHandlers map[string]ChannelHandler
+
+	// RequestHandlers allow overriding the server-level request handlers or
+	// provide extensions to the protocol, such as tcpip forwarding. By default
+	// no handlers are enabled.
+	RequestHandlers map[string]RequestHandler
 
 	listenerWg sync.WaitGroup
 	mu         sync.Mutex
@@ -42,9 +64,6 @@ type Server struct {
 	connWg     sync.WaitGroup
 	doneChan   chan struct{}
 }
-
-// internal for now
-type channelHandler func(srv *Server, conn *gossh.ServerConn, newChan gossh.NewChannel, ctx Context)
 
 func (srv *Server) ensureHostSigner() error {
 	if len(srv.HostSigners) == 0 {
@@ -57,8 +76,30 @@ func (srv *Server) ensureHostSigner() error {
 	return nil
 }
 
+func (srv *Server) ensureHandlers() {
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+	if srv.RequestHandlers == nil {
+		srv.RequestHandlers = map[string]RequestHandler{}
+		for k, v := range DefaultRequestHandlers {
+			srv.RequestHandlers[k] = v
+		}
+	}
+	if srv.ChannelHandlers == nil {
+		srv.ChannelHandlers = map[string]ChannelHandler{}
+		for k, v := range DefaultChannelHandlers {
+			srv.ChannelHandlers[k] = v
+		}
+	}
+}
+
 func (srv *Server) config(ctx Context) *gossh.ServerConfig {
-	config := &gossh.ServerConfig{}
+	var config *gossh.ServerConfig
+	if srv.ServerConfigCallback == nil {
+		config = &gossh.ServerConfig{}
+	} else {
+		config = srv.ServerConfigCallback(ctx)
+	}
 	for _, signer := range srv.HostSigners {
 		config.AddHostKey(signer)
 	}
@@ -84,6 +125,15 @@ func (srv *Server) config(ctx Context) *gossh.ServerConfig {
 				return ctx.Permissions().Permissions, fmt.Errorf("permission denied")
 			}
 			ctx.SetValue(ContextKeyPublicKey, key)
+			return ctx.Permissions().Permissions, nil
+		}
+	}
+	if srv.KeyboardInteractiveHandler != nil {
+		config.KeyboardInteractiveCallback = func(conn gossh.ConnMetadata, challenger gossh.KeyboardInteractiveChallenge) (*gossh.Permissions, error) {
+			applyConnMetadata(ctx, conn)
+			if ok := srv.KeyboardInteractiveHandler(ctx, challenger); !ok {
+				return ctx.Permissions().Permissions, fmt.Errorf("permission denied")
+			}
 			return ctx.Permissions().Permissions, nil
 		}
 	}
@@ -144,18 +194,13 @@ func (srv *Server) Shutdown(ctx context.Context) error {
 //
 // Serve always returns a non-nil error.
 func (srv *Server) Serve(l net.Listener) error {
+	srv.ensureHandlers()
 	defer l.Close()
 	if err := srv.ensureHostSigner(); err != nil {
 		return err
 	}
 	if srv.Handler == nil {
 		srv.Handler = DefaultHandler
-	}
-	if srv.channelHandlers == nil {
-		srv.channelHandlers = map[string]channelHandler{
-			"session":      sessionHandler,
-			"direct-tcpip": directTcpipHandler,
-		}
 	}
 	var tempDelay time.Duration
 
@@ -217,14 +262,35 @@ func (srv *Server) handleConn(newConn net.Conn) {
 
 	ctx.SetValue(ContextKeyConn, sshConn)
 	applyConnMetadata(ctx, sshConn)
-	go gossh.DiscardRequests(reqs)
+	//go gossh.DiscardRequests(reqs)
+	go srv.handleRequests(ctx, reqs)
 	for ch := range chans {
-		handler, found := srv.channelHandlers[ch.ChannelType()]
-		if !found {
+		handler := srv.ChannelHandlers[ch.ChannelType()]
+		if handler == nil {
+			handler = srv.ChannelHandlers["default"]
+		}
+		if handler == nil {
 			ch.Reject(gossh.UnknownChannelType, "unsupported channel type")
 			continue
 		}
 		go handler(srv, sshConn, ch, ctx)
+	}
+}
+
+func (srv *Server) handleRequests(ctx Context, in <-chan *gossh.Request) {
+	for req := range in {
+		handler := srv.RequestHandlers[req.Type]
+		if handler == nil {
+			handler = srv.RequestHandlers["default"]
+		}
+		if handler == nil {
+			req.Reply(false, nil)
+			continue
+		}
+		/*reqCtx, cancel := context.WithCancel(ctx)
+		defer cancel() */
+		ret, payload := handler(ctx, srv, req)
+		req.Reply(ret, payload)
 	}
 }
 

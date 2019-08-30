@@ -2,9 +2,9 @@ package ssh
 
 import (
 	"bytes"
-	"fmt"
 	"io/ioutil"
 	"net"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -34,7 +34,7 @@ func newTestSessionWithForwarding(t *testing.T, forwardingEnabled bool) (net.Lis
 	_, client, cleanup := newTestSession(t, &Server{
 		Handler: func(s Session) {},
 		LocalPortForwardingCallback: func(ctx Context, destinationHost string, destinationPort uint32) bool {
-			addr := fmt.Sprintf("%s:%d", destinationHost, destinationPort)
+			addr := net.JoinHostPort(destinationHost, strconv.FormatInt(int64(destinationPort), 10))
 			if addr != l.Addr().String() {
 				panic("unexpected destinationHost: " + addr)
 			}

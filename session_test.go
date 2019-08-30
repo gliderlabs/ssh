@@ -11,6 +11,7 @@ import (
 )
 
 func (srv *Server) serveOnce(l net.Listener) error {
+	srv.ensureHandlers()
 	if err := srv.ensureHostSigner(); err != nil {
 		return err
 	}
@@ -18,9 +19,9 @@ func (srv *Server) serveOnce(l net.Listener) error {
 	if e != nil {
 		return e
 	}
-	srv.channelHandlers = map[string]channelHandler{
-		"session":      sessionHandler,
-		"direct-tcpip": directTcpipHandler,
+	srv.ChannelHandlers = map[string]ChannelHandler{
+		"session":      DefaultSessionHandler,
+		"direct-tcpip": DirectTCPIPHandler,
 	}
 	srv.handleConn(conn)
 	return nil

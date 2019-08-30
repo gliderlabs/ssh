@@ -47,6 +47,9 @@ type Session interface {
 	// Subsystem returns subsystem name if one was asked for, else empty string.
 	Subsystem() string
 
+	// RawCommand returns the exact command that was provided by the user.
+	RawCommand() string
+
 	// PublicKey returns the PublicKey used to authenticate. If a public key was not
 	// used it will return nil.
 	PublicKey() PublicKey
@@ -80,18 +83,19 @@ type Session interface {
 // when there is no signal channel specified
 const maxSigBufSize = 128
 
-func sessionHandler(srv *Server, conn *gossh.ServerConn, newChan gossh.NewChannel, ctx Context) {
+func DefaultSessionHandler(srv *Server, conn *gossh.ServerConn, newChan gossh.NewChannel, ctx Context) {
 	ch, reqs, err := newChan.Accept()
 	if err != nil {
 		// TODO: trigger event callback
 		return
 	}
 	sess := &session{
-		Channel: ch,
-		conn:    conn,
-		handler: srv.Handler,
-		ptyCb:   srv.PtyCallback,
-		ctx:     ctx,
+		Channel:   ch,
+		conn:      conn,
+		handler:   srv.Handler,
+		ptyCb:     srv.PtyCallback,
+		sessReqCb: srv.SessionRequestCallback,
+		ctx:       ctx,
 	}
 	sess.handleRequests(reqs)
 }
@@ -107,8 +111,9 @@ type session struct {
 	winch     chan Window
 	env       []string
 	ptyCb     PtyCallback
-	cmd       []string
 	subsystem string
+	sessReqCb SessionRequestCallback
+	rawCmd    string
 	ctx       Context
 	sigCh     chan<- Signal
 	sigBuf    []Signal
@@ -181,8 +186,13 @@ func (sess *session) Environ() []string {
 	return append([]string(nil), sess.env...)
 }
 
+func (sess *session) RawCommand() string {
+	return sess.rawCmd
+}
+
 func (sess *session) Command() []string {
-	return append([]string(nil), sess.cmd...)
+	cmd, _ := shlex.Split(sess.rawCmd, true)
+	return append([]string(nil), cmd...)
 }
 
 func (sess *session) Subsystem() string {
@@ -217,12 +227,22 @@ func (sess *session) handleRequests(reqs <-chan *gossh.Request) {
 				req.Reply(false, nil)
 				continue
 			}
-			sess.handled = true
-			req.Reply(true, nil)
 
 			var payload = struct{ Value string }{}
 			gossh.Unmarshal(req.Payload, &payload)
-			sess.cmd, _ = shlex.Split(payload.Value, true)
+			sess.rawCmd = payload.Value
+
+			// If there's a session policy callback, we need to confirm before
+			// accepting the session.
+			if sess.sessReqCb != nil && !sess.sessReqCb(sess, req.Type) {
+				sess.rawCmd = ""
+				req.Reply(false, nil)
+				continue
+			}
+
+			sess.handled = true
+			req.Reply(true, nil)
+
 			go func() {
 				sess.handler(sess)
 				sess.Exit(0)
@@ -305,6 +325,7 @@ func (sess *session) handleRequests(reqs <-chan *gossh.Request) {
 			req.Reply(true, nil)
 		default:
 			// TODO: debug log
+			req.Reply(false, nil)
 		}
 	}
 }

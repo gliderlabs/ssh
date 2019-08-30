@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"net"
+	"sync"
 
 	gossh "golang.org/x/crypto/ssh"
 )
@@ -48,7 +49,7 @@ var (
 	ContextKeyServer = &contextKey{"ssh-server"}
 
 	// ContextKeyConn is a context key for use with Contexts in this package.
-	// The associated value will be of type gossh.Conn.
+	// The associated value will be of type gossh.ServerConn.
 	ContextKeyConn = &contextKey{"ssh-conn"}
 
 	// ContextKeyPublicKey is a context key for use with Contexts in this package.
@@ -59,9 +60,11 @@ var (
 // Context is a package specific context interface. It exposes connection
 // metadata and allows new values to be easily written to it. It's used in
 // authentication handlers and callbacks, and its underlying context.Context is
-// exposed on Session in the session Handler.
+// exposed on Session in the session Handler. A connection-scoped lock is also
+// embedded in the context to make it easier to limit operations per-connection.
 type Context interface {
 	context.Context
+	sync.Locker
 
 	// User returns the username used when establishing the SSH connection.
 	User() string
@@ -90,11 +93,12 @@ type Context interface {
 
 type sshContext struct {
 	context.Context
+	*sync.Mutex
 }
 
 func newContext(srv *Server) (*sshContext, context.CancelFunc) {
 	innerCtx, cancel := context.WithCancel(context.Background())
-	ctx := &sshContext{innerCtx}
+	ctx := &sshContext{innerCtx, &sync.Mutex{}}
 	ctx.SetValue(ContextKeyServer, srv)
 	perms := &Permissions{&gossh.Permissions{}}
 	ctx.SetValue(ContextKeyPermissions, perms)
