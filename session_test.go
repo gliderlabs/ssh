@@ -23,7 +23,7 @@ func (srv *Server) serveOnce(l net.Listener) error {
 		"session":      DefaultSessionHandler,
 		"direct-tcpip": DirectTCPIPHandler,
 	}
-	srv.handleConn(conn)
+	srv.HandleConn(conn)
 	return nil
 }
 
