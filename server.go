@@ -228,11 +228,11 @@ func (srv *Server) Serve(l net.Listener) error {
 			}
 			return e
 		}
-		go srv.handleConn(conn)
+		go srv.HandleConn(conn)
 	}
 }
 
-func (srv *Server) handleConn(newConn net.Conn) {
+func (srv *Server) HandleConn(newConn net.Conn) {
 	if srv.ConnCallback != nil {
 		cbConn := srv.ConnCallback(newConn)
 		if cbConn == nil {
