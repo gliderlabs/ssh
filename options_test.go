@@ -95,7 +95,7 @@ func TestConnWrapping(t *testing.T) {
 		HostKeyCallback: gossh.InsecureIgnoreHostKey(),
 	}, PasswordAuth(func(ctx Context, password string) bool {
 		return true
-	}), WrapConn(func(conn net.Conn) net.Conn {
+	}), WrapConn(func(ctx Context, conn net.Conn) net.Conn {
 		wrapped = &wrappedConn{conn, 0}
 		return wrapped
 	}))

@@ -233,15 +233,15 @@ func (srv *Server) Serve(l net.Listener) error {
 }
 
 func (srv *Server) HandleConn(newConn net.Conn) {
+	ctx, cancel := newContext(srv)
 	if srv.ConnCallback != nil {
-		cbConn := srv.ConnCallback(newConn)
+		cbConn := srv.ConnCallback(ctx, newConn)
 		if cbConn == nil {
 			newConn.Close()
 			return
 		}
 		newConn = cbConn
 	}
-	ctx, cancel := newContext(srv)
 	conn := &serverConn{
 		Conn:          newConn,
 		idleTimeout:   srv.IdleTimeout,
