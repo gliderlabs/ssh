@@ -291,7 +291,9 @@ func TestSignals(t *testing.T) {
 
 	session, _, cleanup := newTestSession(t, &Server{
 		Handler: func(s Session) {
-			signals := make(chan Signal)
+			// We need to use a buffered channel here, otherwise it's possible for the
+			// second call to Signal to get discarded.
+			signals := make(chan Signal, 2)
 			s.Signals(signals)
 			if sig := <-signals; sig != SIGINT {
 				t.Fatalf("expected signal %v but got %v", SIGINT, sig)
