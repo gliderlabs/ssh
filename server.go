@@ -315,6 +315,18 @@ func (srv *Server) ListenAndServe() error {
 func (srv *Server) AddHostKey(key Signer) {
 	// these are later added via AddHostKey on ServerConfig, which performs the
 	// check for one of every algorithm.
+
+	// This check is based on the AddHostKey method from the x/crypto/ssh
+	// library. This allows us to only keep one active key for each type on a
+	// server at once. So, if you're dynamically updating keys at runtime, this
+	// list will not keep growing.
+	for i, k := range srv.HostSigners {
+		if k.PublicKey().Type() == key.PublicKey().Type() {
+			srv.HostSigners[i] = key
+			return
+		}
+	}
+
 	srv.HostSigners = append(srv.HostSigners, key)
 }
 
