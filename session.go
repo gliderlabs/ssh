@@ -301,6 +301,7 @@ func (sess *session) handleRequests(reqs <-chan *gossh.Request) {
 			handler, ok := sess.subsystemHandlers[subname]
 			if !ok {
 				req.Reply(false, nil)
+				continue
 			}
 			sess.handled = true
 			req.Reply(true, nil)
