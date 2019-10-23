@@ -8,6 +8,26 @@ import (
 	"time"
 )
 
+func TestAddHostKey(t *testing.T) {
+	s := Server{}
+	signer, err := generateSigner()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.AddHostKey(signer)
+	if len(s.HostSigners) != 1 {
+		t.Fatal("Key was not properly added")
+	}
+	signer, err = generateSigner()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.AddHostKey(signer)
+	if len(s.HostSigners) != 1 {
+		t.Fatal("Key was not properly replaced")
+	}
+}
+
 func TestServerShutdown(t *testing.T) {
 	l := newLocalListener()
 	testBytes := []byte("Hello world\n")

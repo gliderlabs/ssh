@@ -58,7 +58,7 @@ type Server struct {
 	RequestHandlers map[string]RequestHandler
 
 	listenerWg sync.WaitGroup
-	mu         sync.Mutex
+	mu         sync.RWMutex
 	listeners  map[net.Listener]struct{}
 	conns      map[*gossh.ServerConn]struct{}
 	connWg     sync.WaitGroup
@@ -66,6 +66,9 @@ type Server struct {
 }
 
 func (srv *Server) ensureHostSigner() error {
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+
 	if len(srv.HostSigners) == 0 {
 		signer, err := generateSigner()
 		if err != nil {
@@ -79,6 +82,7 @@ func (srv *Server) ensureHostSigner() error {
 func (srv *Server) ensureHandlers() {
 	srv.mu.Lock()
 	defer srv.mu.Unlock()
+
 	if srv.RequestHandlers == nil {
 		srv.RequestHandlers = map[string]RequestHandler{}
 		for k, v := range DefaultRequestHandlers {
@@ -94,6 +98,9 @@ func (srv *Server) ensureHandlers() {
 }
 
 func (srv *Server) config(ctx Context) *gossh.ServerConfig {
+	srv.mu.RLock()
+	defer srv.mu.RUnlock()
+
 	var config *gossh.ServerConfig
 	if srv.ServerConfigCallback == nil {
 		config = &gossh.ServerConfig{}
@@ -142,6 +149,9 @@ func (srv *Server) config(ctx Context) *gossh.ServerConfig {
 
 // Handle sets the Handler for the server.
 func (srv *Server) Handle(fn Handler) {
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+
 	srv.Handler = fn
 }
 
@@ -153,6 +163,7 @@ func (srv *Server) Handle(fn Handler) {
 func (srv *Server) Close() error {
 	srv.mu.Lock()
 	defer srv.mu.Unlock()
+
 	srv.closeDoneChanLocked()
 	err := srv.closeListenersLocked()
 	for c := range srv.conns {
@@ -313,19 +324,42 @@ func (srv *Server) ListenAndServe() error {
 // with the same algorithm, it is overwritten. Each server config must have at
 // least one host key.
 func (srv *Server) AddHostKey(key Signer) {
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+
 	// these are later added via AddHostKey on ServerConfig, which performs the
 	// check for one of every algorithm.
+
+	// This check is based on the AddHostKey method from the x/crypto/ssh
+	// library. This allows us to only keep one active key for each type on a
+	// server at once. So, if you're dynamically updating keys at runtime, this
+	// list will not keep growing.
+	for i, k := range srv.HostSigners {
+		if k.PublicKey().Type() == key.PublicKey().Type() {
+			srv.HostSigners[i] = key
+			return
+		}
+	}
+
 	srv.HostSigners = append(srv.HostSigners, key)
 }
 
 // SetOption runs a functional option against the server.
 func (srv *Server) SetOption(option Option) error {
+	// NOTE: there is a potential race here for any option that doesn't call an
+	// internal method. We can't actually lock here because if something calls
+	// (as an example) AddHostKey, it will deadlock.
+
+	//srv.mu.Lock()
+	//defer srv.mu.Unlock()
+
 	return option(srv)
 }
 
 func (srv *Server) getDoneChan() <-chan struct{} {
 	srv.mu.Lock()
 	defer srv.mu.Unlock()
+
 	return srv.getDoneChanLocked()
 }
 
@@ -362,6 +396,7 @@ func (srv *Server) closeListenersLocked() error {
 func (srv *Server) trackListener(ln net.Listener, add bool) {
 	srv.mu.Lock()
 	defer srv.mu.Unlock()
+
 	if srv.listeners == nil {
 		srv.listeners = make(map[net.Listener]struct{})
 	}
@@ -382,6 +417,7 @@ func (srv *Server) trackListener(ln net.Listener, add bool) {
 func (srv *Server) trackConn(c *gossh.ServerConn, add bool) {
 	srv.mu.Lock()
 	defer srv.mu.Unlock()
+
 	if srv.conns == nil {
 		srv.conns = make(map[*gossh.ServerConn]struct{})
 	}
