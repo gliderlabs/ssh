@@ -53,16 +53,22 @@ func DirectTCPIPHandler(srv *Server, conn *gossh.ServerConn, newChan gossh.NewCh
 	}
 	go gossh.DiscardRequests(reqs)
 
+	done := make(chan struct{}, 2)
 	go func() {
 		defer ch.Close()
 		defer dconn.Close()
 		io.Copy(ch, dconn)
+		done <- struct{}{}
 	}()
 	go func() {
 		defer ch.Close()
 		defer dconn.Close()
 		io.Copy(dconn, ch)
+		done <- struct{}{}
 	}()
+
+	<-done
+	<-done
 }
 
 type remoteForwardRequest struct {
