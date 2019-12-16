@@ -43,7 +43,7 @@ func parsePtyRequest(s []byte) (pty Pty, ok bool) {
 		Val uint32
 	}{}
 
-	termModes := make(ssh.TerminalModes, 0)
+	TerminalModes := make(ssh.TerminalModes, 0)
 	for {
 		if len(modes) < 1 || modes[0] == ttyOPEND || len(modes) < 5 {
 			break
@@ -53,7 +53,7 @@ func parsePtyRequest(s []byte) (pty Pty, ok bool) {
 		if err != nil {
 			return Pty{}, false
 		}
-		termModes[mode.Key] = mode.Val
+		TerminalModes[mode.Key] = mode.Val
 		modes = modes[6:]
 	}
 
@@ -63,7 +63,7 @@ func parsePtyRequest(s []byte) (pty Pty, ok bool) {
 			Width:  int(reqMsg.Columns),
 			Height: int(reqMsg.Rows),
 		},
-		Termmodes: termModes,
+		TerminalModes: TerminalModes,
 	}
 	return pty, true
 }
