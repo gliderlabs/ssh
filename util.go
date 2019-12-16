@@ -8,6 +8,19 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
+type ptyRequestMsg struct {
+	Term     string
+	Columns  uint32
+	Rows     uint32
+	Width    uint32
+	Height   uint32
+	Modelist string
+}
+
+const (
+	ttyOPEND = 0
+)
+
 func generateSigner() (ssh.Signer, error) {
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -17,26 +30,42 @@ func generateSigner() (ssh.Signer, error) {
 }
 
 func parsePtyRequest(s []byte) (pty Pty, ok bool) {
-	term, s, ok := parseString(s)
-	if !ok {
-		return
+	reqMsg := &ptyRequestMsg{}
+	err := ssh.Unmarshal(s, reqMsg)
+	if err != nil {
+		return Pty{}, false
 	}
-	width32, s, ok := parseUint32(s)
-	if !ok {
-		return
+
+	modes := []byte(reqMsg.Modelist)
+
+	mode := struct {
+		Key uint8
+		Val uint32
+	}{}
+
+	termModes := make(ssh.TerminalModes, 0)
+	for {
+		if len(modes) < 1 || modes[0] == ttyOPEND || len(modes) < 5 {
+			break
+		}
+		b := modes[:5]
+		err = ssh.Unmarshal(b, &mode)
+		if err != nil {
+			return Pty{}, false
+		}
+		termModes[mode.Key] = mode.Val
+		modes = modes[6:]
 	}
-	height32, _, ok := parseUint32(s)
-	if !ok {
-		return
-	}
+
 	pty = Pty{
-		Term: term,
+		Term: reqMsg.Term,
 		Window: Window{
-			Width:  int(width32),
-			Height: int(height32),
+			Width:  int(reqMsg.Columns),
+			Height: int(reqMsg.Rows),
 		},
+		Termmodes: termModes,
 	}
-	return
+	return pty, true
 }
 
 func parseWinchRequest(s []byte) (win Window, ok bool) {

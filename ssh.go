@@ -72,9 +72,9 @@ type Window struct {
 
 // Pty represents a PTY request and configuration.
 type Pty struct {
-	Term   string
-	Window Window
-	// HELP WANTED: terminal modes!
+	Term      string
+	Window    Window
+	Termmodes gossh.TerminalModes
 }
 
 // Serve accepts incoming SSH connections on the listener l, creating a new
