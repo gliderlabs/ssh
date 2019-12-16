@@ -74,7 +74,7 @@ type Window struct {
 type Pty struct {
 	Term      string
 	Window    Window
-	Termmodes gossh.TerminalModes
+	TerminalModes gossh.TerminalModes
 }
 
 // Serve accepts incoming SSH connections on the listener l, creating a new
