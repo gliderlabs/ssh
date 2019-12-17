@@ -72,8 +72,8 @@ type Window struct {
 
 // Pty represents a PTY request and configuration.
 type Pty struct {
-	Term      string
-	Window    Window
+	Term          string
+	Window        Window
 	TerminalModes gossh.TerminalModes
 }
 

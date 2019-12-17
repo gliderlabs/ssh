@@ -33,28 +33,13 @@ func parsePtyRequest(s []byte) (pty Pty, ok bool) {
 	reqMsg := &ptyRequestMsg{}
 	err := ssh.Unmarshal(s, reqMsg)
 	if err != nil {
-		return Pty{}, false
+		return
 	}
 
 	modes := []byte(reqMsg.Modelist)
-
-	mode := struct {
-		Key uint8
-		Val uint32
-	}{}
-
-	TerminalModes := make(ssh.TerminalModes, 0)
-	for {
-		if len(modes) < 1 || modes[0] == ttyOPEND || len(modes) < 5 {
-			break
-		}
-		b := modes[:5]
-		err = ssh.Unmarshal(b, &mode)
-		if err != nil {
-			return Pty{}, false
-		}
-		TerminalModes[mode.Key] = mode.Val
-		modes = modes[6:]
+	terminalModes, ok := parseTerminalModes(modes)
+	if !ok {
+		return
 	}
 
 	pty = Pty{
@@ -63,9 +48,71 @@ func parsePtyRequest(s []byte) (pty Pty, ok bool) {
 			Width:  int(reqMsg.Columns),
 			Height: int(reqMsg.Rows),
 		},
-		TerminalModes: TerminalModes,
+		TerminalModes: terminalModes,
 	}
-	return pty, true
+	return
+}
+
+func makeTerminalModes(terminalModes ssh.TerminalModes) string {
+	var tm []byte
+	for k, v := range terminalModes {
+		kv := struct {
+			Key byte
+			Val uint32
+		}{k, v}
+
+		tm = append(tm, ssh.Marshal(&kv)...)
+	}
+	tm = append(tm, ttyOPEND)
+	return string(tm)
+}
+
+func parseTerminalModes(s []byte) (terminalModes ssh.TerminalModes, ok bool) {
+	mode := struct {
+		Key uint8
+		Val uint32
+	}{}
+
+	terminalModes = make(ssh.TerminalModes, 0)
+	for {
+		if len(s) < 1 {
+			ok = true
+			return
+		}
+
+		opcode := s[0]
+		switch opcode {
+		case ttyOPEND:
+			ok = true
+			return
+		default:
+			/*
+			 * SSH2:
+			 * Opcodes 1 to 159 are defined to have a uint32
+			 * argument.
+			 * Opcodes 160 to 255 are undefined and cause parsing
+			 * to stop.
+			 */
+			if opcode > 0 && opcode < 160 {
+				if len(s) < 5 {
+					// parse failed
+					return
+				}
+
+				b := s[:5]
+				if err := ssh.Unmarshal(b, &mode); err != nil {
+					return
+				}
+
+				terminalModes[mode.Key] = mode.Val
+				s = s[6:]
+
+			} else {
+				ok = true
+				return
+			}
+		}
+	}
 }
 
 func parseWinchRequest(s []byte) (win Window, ok bool) {
