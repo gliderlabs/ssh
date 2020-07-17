@@ -15,6 +15,10 @@ import (
 // and ListenAndServeTLS methods after a call to Shutdown or Close.
 var ErrServerClosed = errors.New("ssh: Server closed")
 
+type SubsystemHandler func(s Session)
+
+var DefaultSubsystemHandlers = map[string]SubsystemHandler{}
+
 type RequestHandler func(ctx Context, srv *Server, req *gossh.Request) (ok bool, payload []byte)
 
 var DefaultRequestHandlers = map[string]RequestHandler{}
@@ -57,6 +61,10 @@ type Server struct {
 	// no handlers are enabled.
 	RequestHandlers map[string]RequestHandler
 
+	// SubsystemHandlers are handlers which are similar to the usual SSH command
+	// handlers, but handle named subsystems.
+	SubsystemHandlers map[string]SubsystemHandler
+
 	listenerWg sync.WaitGroup
 	mu         sync.RWMutex
 	listeners  map[net.Listener]struct{}
@@ -93,6 +101,12 @@ func (srv *Server) ensureHandlers() {
 		srv.ChannelHandlers = map[string]ChannelHandler{}
 		for k, v := range DefaultChannelHandlers {
 			srv.ChannelHandlers[k] = v
+		}
+	}
+	if srv.SubsystemHandlers == nil {
+		srv.SubsystemHandlers = map[string]SubsystemHandler{}
+		for k, v := range DefaultSubsystemHandlers {
+			srv.SubsystemHandlers[k] = v
 		}
 	}
 }
