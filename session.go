@@ -77,6 +77,12 @@ type Session interface {
 	// If there are buffered signals when a channel is registered, they will be
 	// sent in order on the channel immediately after registering.
 	Signals(c chan<- Signal)
+
+	// Break regisers a channel to receive notifications of break requests sent
+	// from the client. The channel must handle break requests, or it will block
+	// the request handling loop. Registering nil will unregister the channel.
+	// During the time that no channel is registered, breaks are ignored.
+	Break(c chan<- bool)
 }
 
 // maxSigBufSize is how many signals will be buffered
@@ -119,6 +125,7 @@ type session struct {
 	ctx               Context
 	sigCh             chan<- Signal
 	sigBuf            []Signal
+	breakCh           chan<- bool
 }
 
 func (sess *session) Write(p []byte) (n int, err error) {
@@ -219,6 +226,12 @@ func (sess *session) Signals(c chan<- Signal) {
 			}
 		}()
 	}
+}
+
+func (sess *session) Break(c chan<- bool) {
+	sess.Lock()
+	defer sess.Unlock()
+	sess.breakCh = c
 }
 
 func (sess *session) handleRequests(reqs <-chan *gossh.Request) {
@@ -344,6 +357,13 @@ func (sess *session) handleRequests(reqs <-chan *gossh.Request) {
 			// TODO: option/callback to allow agent forwarding
 			SetAgentRequested(sess.ctx)
 			req.Reply(true, nil)
+		case "break":
+			ok := false
+			if sess.breakCh != nil {
+				sess.breakCh <- true
+				ok = true
+			}
+			req.Reply(ok, nil)
 		default:
 			// TODO: debug log
 			req.Reply(false, nil)
