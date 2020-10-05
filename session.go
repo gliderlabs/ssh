@@ -359,11 +359,13 @@ func (sess *session) handleRequests(reqs <-chan *gossh.Request) {
 			req.Reply(true, nil)
 		case "break":
 			ok := false
+			sess.Lock()
 			if sess.breakCh != nil {
 				sess.breakCh <- true
 				ok = true
 			}
 			req.Reply(ok, nil)
+			sess.Unlock()
 		default:
 			// TODO: debug log
 			req.Reply(false, nil)
