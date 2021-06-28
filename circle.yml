@@ -11,7 +11,7 @@ jobs:
 
   build-go-1.11:
     docker:
-    - image: golang:1.15
+    - image: golang:1.11
     working_directory: /go/src/github.com/gliderlabs/ssh
     steps:
     - checkout
