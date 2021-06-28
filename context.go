@@ -2,7 +2,6 @@ package ssh
 
 import (
 	"context"
-	"encoding/hex"
 	"net"
 	"sync"
 
@@ -70,13 +69,13 @@ type Context interface {
 	User() string
 
 	// SessionID returns the session hash.
-	SessionID() string
+	SessionID() []byte
 
 	// ClientVersion returns the version reported by the client.
-	ClientVersion() string
+	ClientVersion() []byte
 
 	// ServerVersion returns the version reported by the server.
-	ServerVersion() string
+	ServerVersion() []byte
 
 	// RemoteAddr returns the remote address for this connection.
 	RemoteAddr() net.Addr
@@ -111,9 +110,9 @@ func applyConnMetadata(ctx Context, conn gossh.ConnMetadata) {
 	if ctx.Value(ContextKeySessionID) != nil {
 		return
 	}
-	ctx.SetValue(ContextKeySessionID, hex.EncodeToString(conn.SessionID()))
-	ctx.SetValue(ContextKeyClientVersion, string(conn.ClientVersion()))
-	ctx.SetValue(ContextKeyServerVersion, string(conn.ServerVersion()))
+	ctx.SetValue(ContextKeySessionID, conn.SessionID())
+	ctx.SetValue(ContextKeyClientVersion, conn.ClientVersion())
+	ctx.SetValue(ContextKeyServerVersion, conn.ServerVersion())
 	ctx.SetValue(ContextKeyUser, conn.User())
 	ctx.SetValue(ContextKeyLocalAddr, conn.LocalAddr())
 	ctx.SetValue(ContextKeyRemoteAddr, conn.RemoteAddr())
@@ -127,16 +126,16 @@ func (ctx *sshContext) User() string {
 	return ctx.Value(ContextKeyUser).(string)
 }
 
-func (ctx *sshContext) SessionID() string {
-	return ctx.Value(ContextKeySessionID).(string)
+func (ctx *sshContext) SessionID() []byte {
+	return ctx.Value(ContextKeySessionID).([]byte)
 }
 
-func (ctx *sshContext) ClientVersion() string {
-	return ctx.Value(ContextKeyClientVersion).(string)
+func (ctx *sshContext) ClientVersion() []byte {
+	return ctx.Value(ContextKeyClientVersion).([]byte)
 }
 
-func (ctx *sshContext) ServerVersion() string {
-	return ctx.Value(ContextKeyServerVersion).(string)
+func (ctx *sshContext) ServerVersion() []byte {
+	return ctx.Value(ContextKeyServerVersion).([]byte)
 }
 
 func (ctx *sshContext) RemoteAddr() net.Addr {

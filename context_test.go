@@ -1,6 +1,10 @@
 package ssh
 
-import "testing"
+import (
+	"testing"
+
+	gossh "golang.org/x/crypto/ssh"
+)
 
 func TestSetPermissions(t *testing.T) {
 	t.Parallel()
@@ -43,5 +47,12 @@ func TestSetValue(t *testing.T) {
 	defer cleanup()
 	if err := session.Run(""); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestContextAsConnMetadata (t *testing.T) {
+	var s Context = &sshContext{}
+	if _, ok := s.(gossh.ConnMetadata); !ok {
+		t.Error("Context unusable as ConnMetadata")
 	}
 }
