@@ -37,10 +37,15 @@ func DirectTCPIPHandler(srv *Server, conn *gossh.ServerConn, newChan gossh.NewCh
 		return
 	}
 
-	dest := net.JoinHostPort(d.DestAddr, strconv.FormatInt(int64(d.DestPort), 10))
-
-	var dialer net.Dialer
-	dconn, err := dialer.DialContext(ctx, "tcp", dest)
+	laddr := &net.TCPAddr{
+		IP:   net.ParseIP(d.OriginAddr),
+		Port: int(d.OriginPort),
+	}
+	raddr := &net.TCPAddr{
+		IP:   net.ParseIP(d.DestAddr),
+		Port: int(d.DestPort),
+	}
+	dconn, err := net.DialTCP("tcp", laddr, raddr)
 	if err != nil {
 		newChan.Reject(gossh.ConnectionFailed, err.Error())
 		return
