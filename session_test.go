@@ -199,6 +199,9 @@ func TestPty(t *testing.T) {
 	term := "xterm"
 	winWidth := 40
 	winHeight := 80
+	TerminalModes := make(gossh.TerminalModes)
+	ttyOPOSPEED := uint32(38400)
+	TerminalModes[gossh.TTY_OP_OSPEED] = ttyOPOSPEED
 	done := make(chan bool)
 	session, _, cleanup := newTestSession(t, &Server{
 		Handler: func(s Session) {
@@ -215,11 +218,15 @@ func TestPty(t *testing.T) {
 			if ptyReq.Window.Height != winHeight {
 				t.Fatalf("expected window height %#v but got %#v", winHeight, ptyReq.Window.Height)
 			}
+			mode := ptyReq.TerminalModes[gossh.TTY_OP_OSPEED]
+			if ptyReq.TerminalModes[gossh.TTY_OP_OSPEED] != ttyOPOSPEED {
+				t.Fatalf("expected mode %#v but got %#v", ttyOPOSPEED, mode)
+			}
 			close(done)
 		},
 	}, nil)
 	defer cleanup()
-	if err := session.RequestPty(term, winHeight, winWidth, gossh.TerminalModes{}); err != nil {
+	if err := session.RequestPty(term, winHeight, winWidth, TerminalModes); err != nil {
 		t.Fatalf("expected nil but got %v", err)
 	}
 	if err := session.Shell(); err != nil {
