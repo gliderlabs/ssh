@@ -9,7 +9,7 @@ jobs:
     - run: go get
     - run: go test -v -race
 
-  build-go-latest-minus-1:
+  build-go-1.11:
     docker:
     - image: golang:1.15
     working_directory: /go/src/github.com/gliderlabs/ssh
@@ -23,4 +23,4 @@ workflows:
   build:
     jobs:
       - build-go-latest
-      - build-go-latest-minus-1
+      - build-go-1.11
