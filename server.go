@@ -132,7 +132,7 @@ func (srv *Server) config(ctx Context) *gossh.ServerConfig {
 	if srv.Version != "" {
 		config.ServerVersion = "SSH-2.0-" + srv.Version
 	}
-	if srv.PasswordHandler != nil {
+	if srv.PasswordHandler != nil && config.PasswordCallback == nil {
 		config.PasswordCallback = func(conn gossh.ConnMetadata, password []byte) (*gossh.Permissions, error) {
 			applyConnMetadata(ctx, conn)
 			if ok := srv.PasswordHandler(ctx, string(password)); !ok {
@@ -140,8 +140,13 @@ func (srv *Server) config(ctx Context) *gossh.ServerConfig {
 			}
 			return ctx.Permissions().Permissions, nil
 		}
+	} else if config.PasswordCallback != nil {
+		currentCallback := config.PasswordCallback
+		config.PasswordCallback = func(conn gossh.ConnMetadata, password []byte) (*gossh.Permissions, error) {
+			return currentCallback(conn, password)
+		}
 	}
-	if srv.PublicKeyHandler != nil {
+	if srv.PublicKeyHandler != nil && config.PublicKeyCallback == nil {
 		config.PublicKeyCallback = func(conn gossh.ConnMetadata, key gossh.PublicKey) (*gossh.Permissions, error) {
 			applyConnMetadata(ctx, conn)
 			if ok := srv.PublicKeyHandler(ctx, key); !ok {
@@ -150,14 +155,24 @@ func (srv *Server) config(ctx Context) *gossh.ServerConfig {
 			ctx.SetValue(ContextKeyPublicKey, key)
 			return ctx.Permissions().Permissions, nil
 		}
+	} else if config.PublicKeyCallback != nil {
+		currentCallback := config.PublicKeyCallback
+		config.PublicKeyCallback = func(conn gossh.ConnMetadata, key gossh.PublicKey) (*gossh.Permissions, error) {
+			return currentCallback(conn, key)
+		}
 	}
-	if srv.KeyboardInteractiveHandler != nil {
+	if srv.KeyboardInteractiveHandler != nil && config.KeyboardInteractiveCallback == nil {
 		config.KeyboardInteractiveCallback = func(conn gossh.ConnMetadata, challenger gossh.KeyboardInteractiveChallenge) (*gossh.Permissions, error) {
 			applyConnMetadata(ctx, conn)
 			if ok := srv.KeyboardInteractiveHandler(ctx, challenger); !ok {
 				return ctx.Permissions().Permissions, fmt.Errorf("permission denied")
 			}
 			return ctx.Permissions().Permissions, nil
+		}
+	} else if config.KeyboardInteractiveCallback != nil {
+		currentCallback := config.KeyboardInteractiveCallback
+		config.KeyboardInteractiveCallback = func(conn gossh.ConnMetadata, challenger gossh.KeyboardInteractiveChallenge) (*gossh.Permissions, error) {
+			return currentCallback(conn, challenger)
 		}
 	}
 	return config
