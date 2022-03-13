@@ -230,9 +230,9 @@ func TestPty(t *testing.T) {
 
 func TestPtyResize(t *testing.T) {
 	t.Parallel()
-	winch0 := Window{40, 80}
-	winch1 := Window{80, 160}
-	winch2 := Window{20, 40}
+	winch0 := Window{40, 80, 320, 640}
+	winch1 := Window{80, 160, 640, 1280}
+	winch2 := Window{20, 40, 160, 320}
 	winches := make(chan Window)
 	done := make(chan bool)
 	session, _, cleanup := newTestSession(t, &Server{
@@ -263,20 +263,16 @@ func TestPtyResize(t *testing.T) {
 		t.Fatalf("expected window %#v but got %#v", winch0, gotWinch)
 	}
 	// winch1
-	winchMsg := struct{ w, h uint32 }{uint32(winch1.Width), uint32(winch1.Height)}
-	ok, err := session.SendRequest("window-change", true, gossh.Marshal(&winchMsg))
-	if err == nil && !ok {
-		t.Fatalf("unexpected error or bad reply on send request")
+	if err := session.WindowChange(winch1.Height, winch1.Width); err != nil {
+		t.Fatalf("expected nil but got %v", err)
 	}
 	gotWinch = <-winches
 	if gotWinch != winch1 {
 		t.Fatalf("expected window %#v but got %#v", winch1, gotWinch)
 	}
 	// winch2
-	winchMsg = struct{ w, h uint32 }{uint32(winch2.Width), uint32(winch2.Height)}
-	ok, err = session.SendRequest("window-change", true, gossh.Marshal(&winchMsg))
-	if err == nil && !ok {
-		t.Fatalf("unexpected error or bad reply on send request")
+	if err := session.WindowChange(winch2.Height, winch2.Width); err != nil {
+		t.Fatalf("expected nil but got %v", err)
 	}
 	gotWinch = <-winches
 	if gotWinch != winch2 {
