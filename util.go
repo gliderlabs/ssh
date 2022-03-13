@@ -17,7 +17,7 @@ func generateSigner() (ssh.Signer, error) {
 }
 
 func parsePtyRequest(payload []byte) (pty Pty, ok bool) {
-	// From https://datatracker.ietf.org/doc/html/rfc4254
+	// See https://datatracker.ietf.org/doc/html/rfc4254#section-6.2
 	// 6.2.  Requesting a Pseudo-Terminal
 	// A pseudo-terminal can be allocated for the session by sending the
 	// following message.
@@ -54,7 +54,7 @@ func parsePtyRequest(payload []byte) (pty Pty, ok bool) {
 }
 
 func parseTerminalModes(in []byte) (modes ssh.TerminalModes, ok bool) {
-	// From https://datatracker.ietf.org/doc/html/rfc4254
+	// See https://datatracker.ietf.org/doc/html/rfc4254#section-8
 	// 8.  Encoding of Terminal Modes
 	//
 	//  All 'encoded terminal modes' (as passed in a pty request) are encoded
@@ -100,7 +100,8 @@ func parseTerminalModes(in []byte) (modes ssh.TerminalModes, ok bool) {
 }
 
 func parseWindow(s []byte) (win Window, rem []byte, ok bool) {
-	// 6.7.  Window Dimension Change Message
+	// See https://datatracker.ietf.org/doc/html/rfc4254#section-6.7
+	// 6.7. Window Dimension Change Message
 	// When the window (terminal) size changes on the client side, it MAY
 	// send a message to the other side to inform it of the new dimensions.
 

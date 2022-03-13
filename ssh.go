@@ -70,7 +70,7 @@ type ConnectionFailedCallback func(conn net.Conn, err error)
 
 // Window represents the size of a PTY window.
 //
-// From https://datatracker.ietf.org/doc/html/rfc4254#section-6.2
+// See https://datatracker.ietf.org/doc/html/rfc4254#section-6.2
 //
 // Zero dimension parameters MUST be ignored. The character/row dimensions
 // override the pixel dimensions (when nonzero).  Pixel dimensions refer
@@ -103,9 +103,6 @@ type Pty struct {
 	//
 	// The opcodes are defined as constants in golang.org/x/crypto/ssh (VINTR,VQUIT,etc.).
 	// Boolean opcodes have values 0 or 1.
-	//
-	// Note: golang.org/x/crypto/ssh currently (2022-03-12) doesn't have a
-	// definition for opcode 42 "iutf8" which was introduced in https://datatracker.ietf.org/doc/html/rfc8160.
 	Modes gossh.TerminalModes
 }
 
