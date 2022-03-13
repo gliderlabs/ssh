@@ -82,6 +82,13 @@ type Session interface {
 	// the request handling loop. Registering nil will unregister the channel.
 	// During the time that no channel is registered, breaks are ignored.
 	Break(c chan<- bool)
+
+	// DisablePTYEmulation disables the session's default minimal PTY emulation.
+	// If you're setting the pty's termios settings from the Pty request, use
+	// this method to avoid corruption.
+	// Currently (2022-03-12) the only emulation implemented is NL-to-CRNL translation (`\n`=>`\r\n`).
+	// A call of DisablePTYEmulation must precede any call to Write.
+	DisablePTYEmulation()
 }
 
 // maxSigBufSize is how many signals will be buffered
@@ -109,26 +116,31 @@ func DefaultSessionHandler(srv *Server, conn *gossh.ServerConn, newChan gossh.Ne
 type session struct {
 	sync.Mutex
 	gossh.Channel
-	conn              *gossh.ServerConn
-	handler           Handler
-	subsystemHandlers map[string]SubsystemHandler
-	handled           bool
-	exited            bool
-	pty               *Pty
-	winch             chan Window
-	env               []string
-	ptyCb             PtyCallback
-	sessReqCb         SessionRequestCallback
-	rawCmd            string
-	subsystem         string
-	ctx               Context
-	sigCh             chan<- Signal
-	sigBuf            []Signal
-	breakCh           chan<- bool
+	conn                *gossh.ServerConn
+	handler             Handler
+	subsystemHandlers   map[string]SubsystemHandler
+	handled             bool
+	exited              bool
+	pty                 *Pty
+	winch               chan Window
+	env                 []string
+	ptyCb               PtyCallback
+	sessReqCb           SessionRequestCallback
+	rawCmd              string
+	subsystem           string
+	ctx                 Context
+	sigCh               chan<- Signal
+	sigBuf              []Signal
+	breakCh             chan<- bool
+	disablePtyEmulation bool
+}
+
+func (sess *session) DisablePTYEmulation() {
+	sess.disablePtyEmulation = true
 }
 
 func (sess *session) Write(p []byte) (n int, err error) {
-	if sess.pty != nil {
+	if sess.pty != nil && !sess.disablePtyEmulation {
 		m := len(p)
 		// normalize \n to \r\n when pty is accepted.
 		// this is a hardcoded shortcut since we don't support terminal modes.
