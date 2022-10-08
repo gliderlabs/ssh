@@ -39,7 +39,7 @@ type Handler func(Session)
 type PublicKeyHandler func(ctx Context, key PublicKey) bool
 
 // PasswordHandler is a callback for performing password authentication.
-type PasswordHandler func(serverUid string, ctx Context, password string) bool
+type PasswordHandler func(ctx Context, password string) bool
 
 // KeyboardInteractiveHandler is a callback for performing keyboard-interactive authentication.
 type KeyboardInteractiveHandler func(ctx Context, challenger gossh.KeyboardInteractiveChallenge) bool

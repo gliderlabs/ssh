@@ -36,6 +36,10 @@ var (
 	// The associated value will be of type string.
 	ContextKeyServerVersion = &contextKey{"server-version"}
 
+	// ContextKeyServerUid is a context key for use with Contexts in this package.
+	// The associated value will be of type string.
+	ContextKeyServerUid = &contextKey{"server-uid"}
+
 	// ContextKeyLocalAddr is a context key for use with Contexts in this package.
 	// The associated value will be of type net.Addr.
 	ContextKeyLocalAddr = &contextKey{"local-addr"}
@@ -89,6 +93,9 @@ type Context interface {
 
 	// SetValue allows you to easily write new values into the underlying context.
 	SetValue(key, value interface{})
+
+	// ServerUid returns the unique
+	ServerUid() string
 }
 
 type sshContext struct {
@@ -100,6 +107,7 @@ func newContext(srv *Server) (*sshContext, context.CancelFunc) {
 	innerCtx, cancel := context.WithCancel(context.Background())
 	ctx := &sshContext{innerCtx, &sync.Mutex{}}
 	ctx.SetValue(ContextKeyServer, srv)
+	ctx.SetValue(ContextKeyServerUid, srv.Uid)
 	perms := &Permissions{&gossh.Permissions{}}
 	ctx.SetValue(ContextKeyPermissions, perms)
 	return ctx, cancel
@@ -152,4 +160,8 @@ func (ctx *sshContext) LocalAddr() net.Addr {
 
 func (ctx *sshContext) Permissions() *Permissions {
 	return ctx.Value(ContextKeyPermissions).(*Permissions)
+}
+
+func (ctx *sshContext) ServerUid() string {
+	return ctx.Value(ContextKeyServerUid).(string)
 }
