@@ -102,6 +102,7 @@ func DefaultSessionHandler(srv *Server, conn *gossh.ServerConn, newChan gossh.Ne
 		sessReqCb:         srv.SessionRequestCallback,
 		subsystemHandlers: srv.SubsystemHandlers,
 		ctx:               ctx,
+		serverUid:         srv.Uid,
 	}
 	sess.handleRequests(reqs)
 }
@@ -125,6 +126,7 @@ type session struct {
 	sigCh             chan<- Signal
 	sigBuf            []Signal
 	breakCh           chan<- bool
+	serverUid         string
 }
 
 func (sess *session) Write(p []byte) (n int, err error) {

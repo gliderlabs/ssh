@@ -38,6 +38,7 @@ type Server struct {
 	HostSigners []Signer // private keys for the host key, must have at least one
 	Version     string   // server version to be sent before the initial handshake
 	Banner      string   // banner shown to the client before authentication
+	Uid         string   // way to uniquely identify the server programatically
 
 	KeyboardInteractiveHandler    KeyboardInteractiveHandler    // keyboard-interactive authentication handler
 	PasswordHandler               PasswordHandler               // password authentication handler
@@ -141,7 +142,7 @@ func (srv *Server) config(ctx Context) *gossh.ServerConfig {
 	if srv.PasswordHandler != nil {
 		config.PasswordCallback = func(conn gossh.ConnMetadata, password []byte) (*gossh.Permissions, error) {
 			applyConnMetadata(ctx, conn)
-			if ok := srv.PasswordHandler(ctx, string(password)); !ok {
+			if ok := srv.PasswordHandler(srv.Uid, ctx, string(password)); !ok {
 				return ctx.Permissions().Permissions, fmt.Errorf("permission denied")
 			}
 			return ctx.Permissions().Permissions, nil
