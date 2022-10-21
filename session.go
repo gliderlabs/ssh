@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"sync"
 
@@ -127,20 +128,51 @@ type session struct {
 	breakCh           chan<- bool
 }
 
-func (sess *session) Write(p []byte) (n int, err error) {
-	if sess.pty != nil {
+type crlfWriter struct {
+	isPty bool
+	io.Writer
+}
+
+func (w crlfWriter) Write(p []byte) (n int, err error) {
+	if w.isPty {
 		m := len(p)
 		// normalize \n to \r\n when pty is accepted.
 		// this is a hardcoded shortcut since we don't support terminal modes.
 		p = bytes.Replace(p, []byte{'\n'}, []byte{'\r', '\n'}, -1)
 		p = bytes.Replace(p, []byte{'\r', '\r', '\n'}, []byte{'\r', '\n'}, -1)
-		n, err = sess.Channel.Write(p)
+		n, err = w.Writer.Write(p)
 		if n > m {
 			n = m
 		}
 		return
 	}
-	return sess.Channel.Write(p)
+	return w.Writer.Write(p)
+}
+
+func (sess *session) Write(p []byte) (int, error) {
+	w := crlfWriter{sess.pty != nil, sess.Channel}
+	return w.Write(p)
+}
+
+type sessStderr struct {
+	w *crlfWriter
+	r io.Reader
+}
+
+func (s sessStderr) Write(p []byte) (int, error) {
+	return s.w.Write(p)
+}
+
+func (s sessStderr) Read(p []byte) (int, error) {
+	return s.r.Read(p)
+}
+
+func (sess *session) Stderr() io.ReadWriter {
+	stderr := sess.Channel.Stderr()
+	return sessStderr{
+		w: &crlfWriter{sess.pty != nil, stderr},
+		r: stderr,
+	}
 }
 
 func (sess *session) PublicKey() PublicKey {
