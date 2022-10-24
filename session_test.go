@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"testing"
+	"time"
 
 	gossh "golang.org/x/crypto/ssh"
 )
@@ -236,7 +237,8 @@ func TestPtyWriter(t *testing.T) {
 	session, _, cleanup := newTestSession(t, &Server{
 		Handler: func(s Session) {
 			_, _ = fmt.Fprintln(s, "foo\nbar")
-			_, _ = fmt.Fprintln(s.SafeStderr(), "many\nerrors")
+			time.Sleep(10 * time.Millisecond)
+			_, _ = fmt.Fprintln(s.Stderr(), "many\nerrors")
 			_ = s.Exit(0)
 		},
 	}, nil)

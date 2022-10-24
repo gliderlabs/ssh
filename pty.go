@@ -13,6 +13,8 @@ func NewPtyWriter(w io.Writer) io.Writer {
 	}
 }
 
+var _ io.Writer = ptyWriter{}
+
 type ptyWriter struct {
 	w io.Writer
 }
@@ -28,4 +30,28 @@ func (w ptyWriter) Write(p []byte) (int, error) {
 		n = m
 	}
 	return n, err
+}
+
+// NewPtyReadWriter return an io.ReadWriter that delegates the read to the
+// given io.ReadWriter, and the writes to a ptyWriter.
+func NewPtyReadWriter(rw io.ReadWriter) io.ReadWriter {
+	return readWriterDelegate{
+		w: NewPtyWriter(rw),
+		r: rw,
+	}
+}
+
+var _ io.ReadWriter = readWriterDelegate{}
+
+type readWriterDelegate struct {
+	w io.Writer
+	r io.Reader
+}
+
+func (rw readWriterDelegate) Read(p []byte) (n int, err error) {
+	return rw.r.Read(p)
+}
+
+func (rw readWriterDelegate) Write(p []byte) (n int, err error) {
+	return rw.w.Write(p)
 }

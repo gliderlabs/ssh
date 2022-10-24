@@ -83,9 +83,11 @@ type Session interface {
 	// During the time that no channel is registered, breaks are ignored.
 	Break(c chan<- bool)
 
-	// SafeStderr returns the Stderr io.Writer that handles replacing \n with
-	// \r\n when there's an active Pty.
-	SafeStderr() io.Writer
+	// Stderr returns an io.ReadWriter that writes to this channel
+	// with the extended data type set to stderr. Stderr may
+	// safely be read and written from a different goroutine than
+	// Read and Write respectively.
+	Stderr() io.ReadWriter
 }
 
 // maxSigBufSize is how many signals will be buffered
@@ -131,11 +133,11 @@ type session struct {
 	breakCh           chan<- bool
 }
 
-func (sess *session) SafeStderr() io.Writer {
+func (sess *session) Stderr() io.ReadWriter {
 	if sess.pty != nil {
-		return NewPtyWriter(sess.Stderr())
+		return NewPtyReadWriter(sess.Channel.Stderr())
 	}
-	return sess.Stderr()
+	return sess.Channel.Stderr()
 }
 
 func (sess *session) Write(p []byte) (int, error) {
