@@ -69,6 +69,57 @@ func TestPasswordAuthBadPass(t *testing.T) {
 	}
 }
 
+func TestPasswordAuthE(t *testing.T) {
+	t.Parallel()
+	testUser := "testuser"
+	testPass := "testpass"
+	session, _, cleanup := newTestSessionWithOptions(t, &Server{
+		Handler: func(s Session) {
+			// noop
+		},
+	}, &gossh.ClientConfig{
+		User: testUser,
+		Auth: []gossh.AuthMethod{
+			gossh.Password(testPass),
+		},
+		HostKeyCallback: gossh.InsecureIgnoreHostKey(),
+	}, PasswordAuthE(func(ctx Context, password string) error {
+		if ctx.User() != testUser {
+			t.Fatalf("user = %#v; want %#v", ctx.User(), testUser)
+		}
+		if password != testPass {
+			t.Fatalf("user = %#v; want %#v", password, testPass)
+		}
+		return nil
+	}))
+	defer cleanup()
+	if err := session.Run(""); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestPasswordAuthEBadPass(t *testing.T) {
+	t.Parallel()
+	l := newLocalListener()
+	srv := &Server{Handler: func(s Session) {}}
+	srv.SetOption(PasswordAuthE(func(ctx Context, password string) error {
+		return nil
+	}))
+	go srv.serveOnce(l)
+	_, err := gossh.Dial("tcp", l.Addr().String(), &gossh.ClientConfig{
+		User: "testuser",
+		Auth: []gossh.AuthMethod{
+			gossh.Password("testpass"),
+		},
+		HostKeyCallback: gossh.InsecureIgnoreHostKey(),
+	})
+	if err != nil {
+		if !strings.Contains(err.Error(), "unable to authenticate") {
+			t.Fatal(err)
+		}
+	}
+}
+
 type wrappedConn struct {
 	net.Conn
 	written int32

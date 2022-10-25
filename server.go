@@ -40,6 +40,7 @@ type Server struct {
 
 	KeyboardInteractiveHandler    KeyboardInteractiveHandler    // keyboard-interactive authentication handler
 	PasswordHandler               PasswordHandler               // password authentication handler
+	PasswordHandlerE              PasswordHandlerE              // password authentiication handler with error, if it is set, it overrides PasswordHandler
 	PublicKeyHandler              PublicKeyHandler              // public key authentication handler
 	PtyCallback                   PtyCallback                   // callback for allowing PTY sessions, allows all if nil
 	ConnCallback                  ConnCallback                  // optional callback for wrapping net.Conn before handling
@@ -126,7 +127,7 @@ func (srv *Server) config(ctx Context) *gossh.ServerConfig {
 	for _, signer := range srv.HostSigners {
 		config.AddHostKey(signer)
 	}
-	if srv.PasswordHandler == nil && srv.PublicKeyHandler == nil && srv.KeyboardInteractiveHandler == nil {
+	if srv.PasswordHandler == nil && srv.PasswordHandlerE == nil && srv.PublicKeyHandler == nil && srv.KeyboardInteractiveHandler == nil {
 		config.NoClientAuth = true
 	}
 	if srv.Version != "" {
@@ -139,6 +140,13 @@ func (srv *Server) config(ctx Context) *gossh.ServerConfig {
 				return ctx.Permissions().Permissions, fmt.Errorf("permission denied")
 			}
 			return ctx.Permissions().Permissions, nil
+		}
+	}
+	if srv.PasswordHandlerE != nil {
+		config.PasswordCallback = func(conn gossh.ConnMetadata, password []byte) (*gossh.Permissions, error) {
+			applyConnMetadata(ctx, conn)
+			err := srv.PasswordHandlerE(ctx, string(password))
+			return ctx.Permissions().Permissions, err
 		}
 	}
 	if srv.PublicKeyHandler != nil {
