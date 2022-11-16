@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"testing"
+	"time"
 
 	gossh "golang.org/x/crypto/ssh"
 )
@@ -226,6 +227,34 @@ func TestPty(t *testing.T) {
 		t.Fatalf("expected nil but got %v", err)
 	}
 	<-done
+}
+
+func TestPtyWriter(t *testing.T) {
+	t.Parallel()
+	term := "xterm"
+	winWidth := 40
+	winHeight := 80
+	session, _, cleanup := newTestSession(t, &Server{
+		Handler: func(s Session) {
+			_, _ = fmt.Fprintln(s, "foo\nbar")
+			time.Sleep(10 * time.Millisecond)
+			_, _ = fmt.Fprintln(s.Stderr(), "many\nerrors")
+			_ = s.Exit(0)
+		},
+	}, nil)
+	defer cleanup()
+	if err := session.RequestPty(term, winHeight, winWidth, gossh.TerminalModes{}); err != nil {
+		t.Fatalf("expected nil but got %v", err)
+	}
+	bts, err := session.CombinedOutput("")
+	if err != nil {
+		t.Fatalf("expected nil but got %v", err)
+	}
+
+	expected := "foo\r\nbar\r\nmany\r\nerrors\r\n"
+	if expected != string(bts) {
+		t.Fatalf("expected output to be %q, got %q", expected, string(bts))
+	}
 }
 
 func TestPtyResize(t *testing.T) {

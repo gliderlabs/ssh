@@ -1,9 +1,9 @@
 package ssh
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"sync"
 
@@ -82,6 +82,12 @@ type Session interface {
 	// the request handling loop. Registering nil will unregister the channel.
 	// During the time that no channel is registered, breaks are ignored.
 	Break(c chan<- bool)
+
+	// Stderr returns an io.ReadWriter that writes to this channel
+	// with the extended data type set to stderr. Stderr may
+	// safely be read and written from a different goroutine than
+	// Read and Write respectively.
+	Stderr() io.ReadWriter
 }
 
 // maxSigBufSize is how many signals will be buffered
@@ -127,18 +133,16 @@ type session struct {
 	breakCh           chan<- bool
 }
 
-func (sess *session) Write(p []byte) (n int, err error) {
+func (sess *session) Stderr() io.ReadWriter {
 	if sess.pty != nil {
-		m := len(p)
-		// normalize \n to \r\n when pty is accepted.
-		// this is a hardcoded shortcut since we don't support terminal modes.
-		p = bytes.Replace(p, []byte{'\n'}, []byte{'\r', '\n'}, -1)
-		p = bytes.Replace(p, []byte{'\r', '\r', '\n'}, []byte{'\r', '\n'}, -1)
-		n, err = sess.Channel.Write(p)
-		if n > m {
-			n = m
-		}
-		return
+		return NewPtyReadWriter(sess.Channel.Stderr())
+	}
+	return sess.Channel.Stderr()
+}
+
+func (sess *session) Write(p []byte) (int, error) {
+	if sess.pty != nil {
+		return NewPtyWriter(sess.Channel).Write(p)
 	}
 	return sess.Channel.Write(p)
 }
@@ -242,7 +246,7 @@ func (sess *session) handleRequests(reqs <-chan *gossh.Request) {
 				continue
 			}
 
-			var payload = struct{ Value string }{}
+			payload := struct{ Value string }{}
 			gossh.Unmarshal(req.Payload, &payload)
 			sess.rawCmd = payload.Value
 
@@ -267,7 +271,7 @@ func (sess *session) handleRequests(reqs <-chan *gossh.Request) {
 				continue
 			}
 
-			var payload = struct{ Value string }{}
+			payload := struct{ Value string }{}
 			gossh.Unmarshal(req.Payload, &payload)
 			sess.subsystem = payload.Value
 
