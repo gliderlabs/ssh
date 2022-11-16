@@ -4,11 +4,10 @@ import (
 	"io"
 	"log"
 
-	"github.com/gliderlabs/ssh"
+	"github.com/charmbracelet/ssh"
 )
 
 func main() {
-
 	log.Println("starting ssh server on port 2222...")
 
 	forwardHandler := &ssh.ForwardedTCPHandler{}

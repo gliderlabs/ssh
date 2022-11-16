@@ -6,11 +6,11 @@ import (
 	"io"
 	"log"
 
+	"github.com/charmbracelet/ssh"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
-	"github.com/gliderlabs/ssh"
 )
 
 func main() {
