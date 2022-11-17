@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"testing"
+	"time"
 
 	gossh "golang.org/x/crypto/ssh"
 )
@@ -104,6 +105,30 @@ func TestStderr(t *testing.T) {
 	}
 	if !bytes.Equal(stderr.Bytes(), testBytes) {
 		t.Fatalf("stderr = %#v; want %#v", stderr.Bytes(), testBytes)
+	}
+}
+
+func TestPtyStderr(t *testing.T) {
+	t.Parallel()
+	testBytes := []byte("Hello world\n\r\n")
+	expectBytes := []byte("Hello world\r\n\r\n")
+	session, _, cleanup := newTestSession(t, &Server{
+		Handler: func(s Session) {
+			s.Stderr().Write(testBytes)
+		},
+	}, nil)
+	err := session.RequestPty("xterm", 80, 40, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+	var stderr bytes.Buffer
+	session.Stderr = &stderr
+	if err := session.Run(""); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(stderr.Bytes(), expectBytes) {
+		t.Fatalf("stderr = %#v; want %#v", stderr.Bytes(), expectBytes)
 	}
 }
 
@@ -226,6 +251,34 @@ func TestPty(t *testing.T) {
 		t.Fatalf("expected nil but got %v", err)
 	}
 	<-done
+}
+
+func TestPtyWriter(t *testing.T) {
+	t.Parallel()
+	term := "xterm"
+	winWidth := 40
+	winHeight := 80
+	session, _, cleanup := newTestSession(t, &Server{
+		Handler: func(s Session) {
+			_, _ = fmt.Fprintln(s, "foo\nbar")
+			time.Sleep(10 * time.Millisecond)
+			_, _ = fmt.Fprintln(s.Stderr(), "many\nerrors")
+			_ = s.Exit(0)
+		},
+	}, nil)
+	defer cleanup()
+	if err := session.RequestPty(term, winHeight, winWidth, gossh.TerminalModes{}); err != nil {
+		t.Fatalf("expected nil but got %v", err)
+	}
+	bts, err := session.CombinedOutput("")
+	if err != nil {
+		t.Fatalf("expected nil but got %v", err)
+	}
+
+	expected := "foo\r\nbar\r\nmany\r\nerrors\r\n"
+	if expected != string(bts) {
+		t.Fatalf("expected output to be %q, got %q", expected, string(bts))
+	}
 }
 
 func TestPtyResize(t *testing.T) {
