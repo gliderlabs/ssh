@@ -108,6 +108,30 @@ func TestStderr(t *testing.T) {
 	}
 }
 
+func TestPtyStderr(t *testing.T) {
+	t.Parallel()
+	testBytes := []byte("Hello world\n\r\n")
+	expectBytes := []byte("Hello world\r\n\r\n")
+	session, _, cleanup := newTestSession(t, &Server{
+		Handler: func(s Session) {
+			s.Stderr().Write(testBytes)
+		},
+	}, nil)
+	err := session.RequestPty("xterm", 80, 40, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+	var stderr bytes.Buffer
+	session.Stderr = &stderr
+	if err := session.Run(""); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(stderr.Bytes(), expectBytes) {
+		t.Fatalf("stderr = %#v; want %#v", stderr.Bytes(), expectBytes)
+	}
+}
+
 func TestStdin(t *testing.T) {
 	t.Parallel()
 	testBytes := []byte("Hello world\n")
