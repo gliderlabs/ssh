@@ -53,6 +53,12 @@ func parsePtyRequest(payload []byte) (pty Pty, ok bool) {
 	return
 }
 
+// parseX11Request parses an X11 forwarding request.
+// See https://www.rfc-editor.org/rfc/rfc4254#section-6.3
+func parseX11Request(payload []byte) (x11 X11, ok bool) {
+	return x11, ssh.Unmarshal(payload, &x11) == nil
+}
+
 func parseTerminalModes(in []byte) (modes ssh.TerminalModes, ok bool) {
 	// See https://datatracker.ietf.org/doc/html/rfc4254#section-8
 	// 8.  Encoding of Terminal Modes

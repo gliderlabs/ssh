@@ -228,11 +228,51 @@ func TestPty(t *testing.T) {
 	<-done
 }
 
+func TestX11(t *testing.T) {
+	t.Parallel()
+	done := make(chan struct{})
+	session, _, cleanup := newTestSession(t, &Server{
+		X11Callback: func(ctx Context, x11 X11) bool {
+			return true
+		},
+		Handler: func(s Session) {
+			x11Req, isX11 := s.X11()
+			if !isX11 {
+				t.Fatalf("expected x11 but none requested")
+			}
+			if !x11Req.SingleConnection {
+				t.Fatalf("expected single connection but got %#v", x11Req.SingleConnection)
+			}
+			close(done)
+		},
+	}, nil)
+	defer cleanup()
+
+	reply, err := session.SendRequest("x11-req", true, gossh.Marshal(X11{
+		SingleConnection: true,
+		AuthProtocol:     "MIT-MAGIC-COOKIE-1",
+		AuthCookie:       "deadbeef",
+		ScreenNumber:     1,
+	}))
+	if err != nil {
+		t.Fatalf("expected nil but got %v", err)
+	}
+	if !reply {
+		t.Fatalf("expected true but got %v", reply)
+	}
+	err = session.Shell()
+	if err != nil {
+		t.Fatalf("expected nil but got %v", err)
+	}
+	session.Close()
+	<-done
+}
+
 func TestPtyResize(t *testing.T) {
 	t.Parallel()
-	winch0 := Window{40, 80}
-	winch1 := Window{80, 160}
-	winch2 := Window{20, 40}
+	winch0 := Window{40, 80, 0, 0}
+	winch1 := Window{80, 160, 0, 0}
+	winch2 := Window{20, 40, 0, 0}
 	winches := make(chan Window)
 	done := make(chan bool)
 	session, _, cleanup := newTestSession(t, &Server{
