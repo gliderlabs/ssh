@@ -68,6 +68,8 @@ type Server struct {
 	// handlers, but handle named subsystems.
 	SubsystemHandlers map[string]SubsystemHandler
 
+	ClientAliveInterval time.Duration
+
 	listenerWg sync.WaitGroup
 	mu         sync.RWMutex
 	listeners  map[net.Listener]struct{}
