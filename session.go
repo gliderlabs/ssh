@@ -14,6 +14,10 @@ import (
 	gossh "golang.org/x/crypto/ssh"
 )
 
+const (
+	keepAliveRequestType = "keepalive@openssh.com"
+)
+
 // Session provides access to information about an SSH session and methods
 // to read and write to the SSH channel with an embedded Channel interface from
 // crypto/ssh.
@@ -279,17 +283,34 @@ func (sess *session) handleRequests(reqs <-chan *gossh.Request) {
 		keepAliveTicker.Stop()
 	}
 
+	lastReceived := time.Now()
+
 	for {
 		select {
 		case <-keepAliveTicker.C:
+
+			if lastReceived.Add(3 * sess.keepAliveInterval).Before(time.Now()) {
+				log.Println("Keep-alive reply not received. Close down the session.")
+
+				err := sess.Close()
+				if err != nil {
+					log.Printf("closing session failed: %v", err)
+				}
+				return
+			}
+
 			log.Println("Send keep-alive request to the client")
-			sess.SendRequest(keepAliveRequestType, false, nil)
+			keepAliveReply, err := sess.SendRequest(keepAliveRequestType, true, nil)
+			log.Println(keepAliveReply, err)
 		case req, ok := <-reqs:
 			if !ok {
 				return
 			}
 
+			log.Println(req.Type, req.WantReply, string(req.Payload))
+
 			if keepAliveEnabled {
+				lastReceived = time.Now()
 				keepAliveTicker.Reset(sess.keepAliveInterval)
 			}
 
@@ -430,6 +451,8 @@ func (sess *session) handleRequests(reqs <-chan *gossh.Request) {
 			case agentRequestType:
 				// TODO: option/callback to allow agent forwarding
 				SetAgentRequested(sess.ctx)
+				req.Reply(true, nil)
+			case keepAliveRequestType:
 				req.Reply(true, nil)
 			case "break":
 				ok := false

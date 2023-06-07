@@ -14,8 +14,6 @@ const (
 	agentRequestType = "auth-agent-req@openssh.com"
 	agentChannelType = "auth-agent@openssh.com"
 
-	keepAliveRequestType = "keepalive@openssh.com"
-
 	agentTempDir    = "auth-agent"
 	agentListenFile = "listener.sock"
 )
