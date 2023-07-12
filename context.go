@@ -93,12 +93,12 @@ type Context interface {
 
 type sshContext struct {
 	context.Context
-	*sync.Mutex
+	*sync.RWMutex
 }
 
 func newContext(srv *Server) (*sshContext, context.CancelFunc) {
 	innerCtx, cancel := context.WithCancel(context.Background())
-	ctx := &sshContext{innerCtx, &sync.Mutex{}}
+	ctx := &sshContext{innerCtx, &sync.RWMutex{}}
 	ctx.SetValue(ContextKeyServer, srv)
 	perms := &Permissions{&gossh.Permissions{}}
 	ctx.SetValue(ContextKeyPermissions, perms)
@@ -120,7 +120,21 @@ func applyConnMetadata(ctx Context, conn gossh.ConnMetadata) {
 }
 
 func (ctx *sshContext) SetValue(key, value interface{}) {
+	ctx.RWMutex.Lock()
+	defer ctx.RWMutex.Unlock()
 	ctx.Context = context.WithValue(ctx.Context, key, value)
+}
+
+func (ctx *sshContext) Value(key interface{}) interface{} {
+	ctx.RWMutex.RLock()
+	defer ctx.RWMutex.RUnlock()
+	return ctx.Context.Value(key)
+}
+
+func (ctx *sshContext) Done() <-chan struct{} {
+	ctx.RWMutex.RLock()
+	defer ctx.RWMutex.RUnlock()
+	return ctx.Context.Done()
 }
 
 func (ctx *sshContext) User() string {
