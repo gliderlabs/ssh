@@ -45,3 +45,27 @@ func TestSetValue(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestRaceRWIssue160(t *testing.T) {
+	value := "foo"
+	key := "bar"
+	session, _, cleanup := newTestSessionWithOptions(t, &Server{
+		Handler: func(s Session) {
+			t.Run("test done", func(t *testing.T) {
+				t.Parallel()
+				go func() {
+					s.Context().SetValue(key, value)
+				}()
+				go func() {
+					select {
+					case <-s.Context().Done():
+					}
+				}()
+			})
+		},
+	}, nil)
+	defer cleanup()
+	if err := session.Run(""); err != nil {
+		t.Fatal(err)
+	}
+}
