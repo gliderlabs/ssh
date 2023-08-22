@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"net"
 	"sync"
+	"time"
 
 	gossh "golang.org/x/crypto/ssh"
 )
@@ -92,9 +93,13 @@ type Context interface {
 }
 
 type sshContext struct {
-	context.Context
-	*sync.RWMutex
+	ctx context.Context
+	mtx *sync.RWMutex
 }
+
+var _ context.Context = &sshContext{}
+
+var _ sync.Locker = &sshContext{}
 
 func newContext(srv *Server) (*sshContext, context.CancelFunc) {
 	innerCtx, cancel := context.WithCancel(context.Background())
@@ -120,21 +125,45 @@ func applyConnMetadata(ctx Context, conn gossh.ConnMetadata) {
 }
 
 func (ctx *sshContext) SetValue(key, value interface{}) {
-	ctx.RWMutex.Lock()
-	defer ctx.RWMutex.Unlock()
-	ctx.Context = context.WithValue(ctx.Context, key, value)
+	ctx.mtx.Lock()
+	defer ctx.mtx.Unlock()
+	ctx.ctx = context.WithValue(ctx.ctx, key, value)
 }
 
 func (ctx *sshContext) Value(key interface{}) interface{} {
-	ctx.RWMutex.RLock()
-	defer ctx.RWMutex.RUnlock()
-	return ctx.Context.Value(key)
+	ctx.mtx.RLock()
+	defer ctx.mtx.RUnlock()
+	return ctx.ctx.Value(key)
 }
 
 func (ctx *sshContext) Done() <-chan struct{} {
-	ctx.RWMutex.RLock()
-	defer ctx.RWMutex.RUnlock()
-	return ctx.Context.Done()
+	ctx.mtx.RLock()
+	defer ctx.mtx.RUnlock()
+	return ctx.ctx.Done()
+}
+
+// Deadline implements context.Context.
+func (ctx *sshContext) Deadline() (deadline time.Time, ok bool) {
+	ctx.mtx.RLock()
+	defer ctx.mtx.RUnlock()
+	return ctx.ctx.Deadline()
+}
+
+// Err implements context.Context.
+func (ctx *sshContext) Err() error {
+	ctx.mtx.RLock()
+	defer ctx.mtx.RUnlock()
+	return ctx.ctx.Err()
+}
+
+// Lock implements sync.Locker.
+func (ctx *sshContext) Lock() {
+	ctx.mtx.Lock()
+}
+
+// Unlock implements sync.Locker.
+func (ctx *sshContext) Unlock() {
+	ctx.mtx.Unlock()
 }
 
 func (ctx *sshContext) User() string {
