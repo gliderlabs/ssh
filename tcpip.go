@@ -113,8 +113,11 @@ func (h *ForwardedTCPHandler) HandleSSHRequest(ctx Context, srv *Server, req *go
 		if err != nil {
 			// TODO: log listen failure
 			return false, []byte{}
+		} else {
+			// addr might not be valid anymore if bind port was 0
+			addr = ln.Addr().String()
 		}
-		_, destPortStr, _ := net.SplitHostPort(ln.Addr().String())
+		_, destPortStr, _ := net.SplitHostPort(addr)
 		destPort, _ := strconv.Atoi(destPortStr)
 		if srv.ReversePortForwardingCallback == nil || !srv.ReversePortForwardingCallback(ctx, reqPayload.BindAddr, uint32(destPort)) {
 			ln.Close()
