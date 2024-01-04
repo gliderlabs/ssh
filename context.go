@@ -95,6 +95,9 @@ type Context interface {
 type sshContext struct {
 	ctx context.Context
 	mtx *sync.RWMutex
+
+	values   map[interface{}]interface{}
+	valuesMu sync.Mutex
 }
 
 var _ context.Context = &sshContext{}
@@ -103,7 +106,11 @@ var _ sync.Locker = &sshContext{}
 
 func newContext(srv *Server) (*sshContext, context.CancelFunc) {
 	innerCtx, cancel := context.WithCancel(context.Background())
-	ctx := &sshContext{innerCtx, &sync.RWMutex{}}
+	ctx := &sshContext{
+		ctx:    innerCtx,
+		mtx:    &sync.RWMutex{},
+		values: make(map[interface{}]interface{}),
+	}
 	ctx.SetValue(ContextKeyServer, srv)
 	perms := &Permissions{&gossh.Permissions{}}
 	ctx.SetValue(ContextKeyPermissions, perms)
@@ -124,16 +131,19 @@ func applyConnMetadata(ctx Context, conn gossh.ConnMetadata) {
 	ctx.SetValue(ContextKeyRemoteAddr, conn.RemoteAddr())
 }
 
-func (ctx *sshContext) SetValue(key, value interface{}) {
-	ctx.mtx.Lock()
-	defer ctx.mtx.Unlock()
-	ctx.ctx = context.WithValue(ctx.ctx, key, value)
+func (ctx *sshContext) Value(key interface{}) interface{} {
+	ctx.valuesMu.Lock()
+	defer ctx.valuesMu.Unlock()
+	if v, ok := ctx.values[key]; ok {
+		return v
+	}
+	return ctx.ctx.Value(key)
 }
 
-func (ctx *sshContext) Value(key interface{}) interface{} {
-	ctx.mtx.RLock()
-	defer ctx.mtx.RUnlock()
-	return ctx.ctx.Value(key)
+func (ctx *sshContext) SetValue(key, value interface{}) {
+	ctx.valuesMu.Lock()
+	defer ctx.valuesMu.Unlock()
+	ctx.values[key] = value
 }
 
 func (ctx *sshContext) Done() <-chan struct{} {
