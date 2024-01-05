@@ -2,7 +2,7 @@ package ssh_test
 
 import (
 	"io"
-	"io/ioutil"
+	"os"
 
 	"github.com/gliderlabs/ssh"
 )
@@ -28,7 +28,7 @@ func ExampleNoPty() {
 func ExamplePublicKeyAuth() {
 	ssh.ListenAndServe(":2222", nil,
 		ssh.PublicKeyAuth(func(ctx ssh.Context, key ssh.PublicKey) bool {
-			data, _ := ioutil.ReadFile("/path/to/allowed/key.pub")
+			data, _ := os.ReadFile("/path/to/allowed/key.pub")
 			allowed, _, _, _, _ := ssh.ParseAuthorizedKey(data)
 			return ssh.KeysEqual(key, allowed)
 		}),
