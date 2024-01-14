@@ -29,6 +29,8 @@ var DefaultChannelHandlers = map[string]ChannelHandler{
 	"session": DefaultSessionHandler,
 }
 
+type NoClientAuthCallback func(gossh.ConnMetadata) (*gossh.Permissions, error)
+
 // Server defines parameters for running an SSH server. The zero value for
 // Server is a valid configuration. When both PasswordHandler and
 // PublicKeyHandler are nil, no client authentication is performed.
@@ -48,6 +50,7 @@ type Server struct {
 	ReversePortForwardingCallback ReversePortForwardingCallback // callback for allowing reverse port forwarding, denies all if nil
 	ServerConfigCallback          ServerConfigCallback          // callback for configuring detailed SSH options
 	SessionRequestCallback        SessionRequestCallback        // callback for allowing or denying SSH sessions
+	NoClientAuthCallback          NoClientAuthCallback
 
 	ConnectionFailedCallback ConnectionFailedCallback // callback to report connection failures
 
@@ -130,6 +133,11 @@ func (srv *Server) config(ctx Context) *gossh.ServerConfig {
 	if srv.PasswordHandler == nil && srv.PublicKeyHandler == nil && srv.KeyboardInteractiveHandler == nil {
 		config.NoClientAuth = true
 	}
+
+	if config.NoClientAuth && srv.NoClientAuthCallback != nil {
+		config.NoClientAuthCallback = srv.NoClientAuthCallback
+	}
+
 	if srv.Version != "" {
 		config.ServerVersion = "SSH-2.0-" + srv.Version
 	}
@@ -147,6 +155,7 @@ func (srv *Server) config(ctx Context) *gossh.ServerConfig {
 			return ctx.Permissions().Permissions, nil
 		}
 	}
+
 	if srv.PublicKeyHandler != nil {
 		config.PublicKeyCallback = func(conn gossh.ConnMetadata, key gossh.PublicKey) (*gossh.Permissions, error) {
 			applyConnMetadata(ctx, conn)
@@ -345,7 +354,7 @@ func (srv *Server) ListenAndServe() error {
 }
 
 // AddHostKey adds a private key as a host key. If an existing host key exists
-// with the same algorithm, it is overwritten. Each server config must have at
+// with the same algorithm, it is overwritten. Each server Config must have at
 // least one host key.
 func (srv *Server) AddHostKey(key Signer) {
 	srv.mu.Lock()
