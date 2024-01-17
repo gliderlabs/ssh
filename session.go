@@ -65,6 +65,9 @@ type Session interface {
 	// setup in the auth handlers via the Context.
 	Permissions() Permissions
 
+	// EmulatedPty returns true if the session is emulating a PTY using PtyWriter.
+	EmulatedPty() bool
+
 	// Pty returns PTY information, a channel of window size changes, and a boolean
 	// of whether or not a PTY was accepted for this session.
 	Pty() (Pty, <-chan Window, bool)
@@ -99,10 +102,12 @@ func DefaultSessionHandler(srv *Server, conn *gossh.ServerConn, newChan gossh.Ne
 		conn:              conn,
 		handler:           srv.Handler,
 		ptyCb:             srv.PtyCallback,
+		ptyHandler:        srv.PtyHandler,
 		sessReqCb:         srv.SessionRequestCallback,
 		subsystemHandlers: srv.SubsystemHandlers,
 		ctx:               ctx,
 	}
+	ctx.SetValue(ContextKeySession, sess)
 	sess.handleRequests(reqs)
 }
 
@@ -118,6 +123,7 @@ type session struct {
 	winch             chan Window
 	env               []string
 	ptyCb             PtyCallback
+	ptyHandler        PtyHandler
 	sessReqCb         SessionRequestCallback
 	rawCmd            string
 	subsystem         string
@@ -128,14 +134,14 @@ type session struct {
 }
 
 func (sess *session) Stderr() io.ReadWriter {
-	if sess.pty != nil {
+	if sess.pty != nil && sess.EmulatedPty() {
 		return NewPtyReadWriter(sess.Channel.Stderr())
 	}
 	return sess.Channel.Stderr()
 }
 
 func (sess *session) Write(p []byte) (int, error) {
-	if sess.pty != nil {
+	if sess.pty != nil && sess.EmulatedPty() {
 		return NewPtyWriter(sess.Channel).Write(p)
 	}
 	return sess.Channel.Write(p)
@@ -205,6 +211,10 @@ func (sess *session) Subsystem() string {
 	return sess.subsystem
 }
 
+func (sess *session) EmulatedPty() bool {
+	return sess.ctx.Value(contextKeyEmulatePty) == true
+}
+
 func (sess *session) Pty() (Pty, <-chan Window, bool) {
 	if sess.pty != nil {
 		return *sess.pty, sess.winch, true
@@ -256,8 +266,16 @@ func (sess *session) handleRequests(reqs <-chan *gossh.Request) {
 			req.Reply(true, nil)
 
 			go func() {
+				if sess.pty != nil {
+					// TODO: log error to server
+					go io.Copy(sess.pty, sess) // nolint: errcheck
+					go io.Copy(sess, sess.pty) // nolint: errcheck
+				}
 				sess.handler(sess)
 				sess.Exit(0)
+				if sess.pty != nil {
+					sess.pty.Close() // nolint: errcheck
+				}
 			}()
 		case "subsystem":
 			if sess.handled {
@@ -331,9 +349,33 @@ func (sess *session) handleRequests(reqs <-chan *gossh.Request) {
 					continue
 				}
 			}
+
 			sess.pty = &ptyReq
 			sess.winch = make(chan Window, 1)
 			sess.winch <- ptyReq.Window
+
+			if sess.ptyHandler != nil {
+				closer, err := sess.ptyHandler(sess.ctx, sess, ptyReq)
+				if err != nil {
+					// TODO: handle error
+					req.Reply(false, nil)
+					continue
+				}
+
+				defer closer() // nolint: errcheck
+
+				if !sess.EmulatedPty() && !sess.pty.IsZero() {
+					go func() {
+						for win := range sess.winch {
+							if err := resizePty(sess, win); err != nil {
+								// TODO: handle error
+								continue
+							}
+						}
+					}()
+				}
+			}
+
 			defer func() {
 				// when reqs is closed
 				close(sess.winch)
@@ -368,4 +410,28 @@ func (sess *session) handleRequests(reqs <-chan *gossh.Request) {
 			req.Reply(false, nil)
 		}
 	}
+}
+
+func (s *session) ptyAllocate(term string, win Window, modes gossh.TerminalModes) (func() error, error) {
+	p, err := newPty(s.ctx, term, win, modes)
+	if err != nil {
+		return nil, err
+	}
+
+	s.pty = &Pty{
+		Term:   term,
+		Window: win,
+		Modes:  modes,
+		impl:   p,
+	}
+
+	return p.Close, nil
+}
+
+func resizePty(sess *session, win Window) error {
+	if sess.pty == nil {
+		return nil
+	}
+
+	return sess.pty.Resize(win.Width, win.Height)
 }

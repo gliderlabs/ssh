@@ -43,7 +43,8 @@ type Server struct {
 	KeyboardInteractiveHandler    KeyboardInteractiveHandler    // keyboard-interactive authentication handler
 	PasswordHandler               PasswordHandler               // password authentication handler
 	PublicKeyHandler              PublicKeyHandler              // public key authentication handler
-	PtyCallback                   PtyCallback                   // callback for allowing PTY sessions, allows all if nil
+	PtyCallback                   PtyCallback                   // callback for allocating and allowing PTY sessions, ssh.EmulatePtyCallback if nil
+	PtyHandler                    PtyHandler                    // pty allocation handler, ssh.emulatePtyHandler if nil
 	ConnCallback                  ConnCallback                  // optional callback for wrapping net.Conn before handling
 	LocalPortForwardingCallback   LocalPortForwardingCallback   // callback for allowing local port forwarding, denies all if nil
 	ReversePortForwardingCallback ReversePortForwardingCallback // callback for allowing reverse port forwarding, denies all if nil
@@ -116,8 +117,8 @@ func (srv *Server) ensureHandlers() {
 }
 
 func (srv *Server) config(ctx Context) *gossh.ServerConfig {
-	srv.mu.RLock()
-	defer srv.mu.RUnlock()
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
 
 	var config *gossh.ServerConfig
 	if srv.ServerConfigCallback == nil {
@@ -130,6 +131,9 @@ func (srv *Server) config(ctx Context) *gossh.ServerConfig {
 	}
 	if srv.PasswordHandler == nil && srv.PublicKeyHandler == nil && srv.KeyboardInteractiveHandler == nil {
 		config.NoClientAuth = true
+	}
+	if srv.PtyHandler == nil {
+		srv.PtyHandler = emulatePtyHandler
 	}
 	if srv.Version != "" {
 		config.ServerVersion = "SSH-2.0-" + srv.Version
@@ -304,7 +308,7 @@ func (srv *Server) HandleConn(newConn net.Conn) {
 
 	ctx.SetValue(ContextKeyConn, sshConn)
 	applyConnMetadata(ctx, sshConn)
-	//go gossh.DiscardRequests(reqs)
+	// go gossh.DiscardRequests(reqs)
 	go srv.handleRequests(ctx, reqs)
 	for ch := range chans {
 		handler := srv.ChannelHandlers[ch.ChannelType()]
@@ -381,8 +385,8 @@ func (srv *Server) SetOption(option Option) error {
 	// internal method. We can't actually lock here because if something calls
 	// (as an example) AddHostKey, it will deadlock.
 
-	//srv.mu.Lock()
-	//defer srv.mu.Unlock()
+	// srv.mu.Lock()
+	// defer srv.mu.Unlock()
 
 	return option(srv)
 }

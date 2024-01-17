@@ -55,6 +55,10 @@ var (
 	// ContextKeyPublicKey is a context key for use with Contexts in this package.
 	// The associated value will be of type PublicKey.
 	ContextKeyPublicKey = &contextKey{"public-key"}
+
+	// ContextKeySession is a context key for use with Contexts in this package.
+	// The associated value will be of type Session.
+	ContextKeySession = &contextKey{"session"}
 )
 
 // Context is a package specific context interface. It exposes connection

@@ -47,8 +47,11 @@ type PasswordHandler func(ctx Context, password string) bool
 // KeyboardInteractiveHandler is a callback for performing keyboard-interactive authentication.
 type KeyboardInteractiveHandler func(ctx Context, challenger gossh.KeyboardInteractiveChallenge) bool
 
-// PtyCallback is a hook for allowing PTY sessions.
-type PtyCallback func(ctx Context, pty Pty) bool
+// PtyHandler is a callback for handling PTY allocation requests.
+type PtyHandler func(ctx Context, s Session, pty Pty) (func() error, error)
+
+// PtyCallback is a hook for handling PTY allocation requests.
+type PtyCallback func(ctx Context, req Pty) bool
 
 // SessionRequestCallback is a callback for allowing or denying SSH sessions.
 type SessionRequestCallback func(sess Session, requestType string) bool
@@ -94,6 +97,8 @@ type Window struct {
 
 // Pty represents a PTY request and configuration.
 type Pty struct {
+	impl
+
 	// Term is the TERM environment variable value.
 	Term string
 
