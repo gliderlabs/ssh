@@ -266,7 +266,7 @@ func (sess *session) handleRequests(reqs <-chan *gossh.Request) {
 			req.Reply(true, nil)
 
 			go func() {
-				if sess.pty != nil {
+				if sess.pty != nil && !sess.pty.IsZero() {
 					// TODO: log error to server
 					go io.Copy(sess.pty, sess) // nolint: errcheck
 					go io.Copy(sess, sess.pty) // nolint: errcheck
