@@ -58,7 +58,7 @@ func (i *impl) start(c *exec.Cmd) error {
 		// If we can't find the process via os.FindProcess, terminate the
 		// process as that's what we rely on for all further operations on the
 		// object.
-		if tErr := windows.TerminateProcess(process, 1); tErr != nil {
+		if tErr := windows.TerminateProcess(windows.Handle(process), 1); tErr != nil {
 			return fmt.Errorf("failed to terminate process after process not found: %w", tErr)
 		}
 		return fmt.Errorf("failed to find process after starting: %w", err)
@@ -76,7 +76,7 @@ func (i *impl) start(c *exec.Cmd) error {
 	go func() {
 		select {
 		case <-i.Context.Done():
-			c.Err = windows.TerminateProcess(process, 1)
+			c.Err = windows.TerminateProcess(windows.Handle(process), 1)
 		case r := <-donec:
 			c.ProcessState = r.ProcessState
 			c.Err = r.error

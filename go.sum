@@ -18,6 +18,8 @@ github.com/charmbracelet/x/errors v0.0.0-20240117030013-d31dba354651 h1:3RXpZWGW
 github.com/charmbracelet/x/errors v0.0.0-20240117030013-d31dba354651/go.mod h1:2P0UgXMEa6TsToMSuFqKFQR+fZTO9CNGUNokkPatT/0=
 github.com/charmbracelet/x/exp/term v0.0.0-20240117030132-5a84c80527c7 h1:S2M2vYTMILqCHZ7IUahNj5w1IWg/cjrfa3yFpQtOXVg=
 github.com/charmbracelet/x/exp/term v0.0.0-20240117030132-5a84c80527c7/go.mod h1:kOOxxyxgAFQVcR5yQJWTuLjzt5dR2pcgwy3WaLEudjE=
+github.com/charmbracelet/x/exp/term v0.0.0-20240117031359-6e25c76a1efe h1:HeRgHWxOTu7l73rKsa5BRAeaUenmNyomiPCUHXv/y14=
+github.com/charmbracelet/x/exp/term v0.0.0-20240117031359-6e25c76a1efe/go.mod h1:kOOxxyxgAFQVcR5yQJWTuLjzt5dR2pcgwy3WaLEudjE=
 github.com/client9/misspell v0.3.4/go.mod h1:qj6jICC3Q7zFZvVWo7KLAzC3yx5G7kyvSDkc90ppPyw=
 github.com/cloudflare/circl v1.1.0/go.mod h1:prBCrKB9DV4poKZY1l9zBXg2QJY7mvgRvtMxxK7fi4I=
 github.com/coreos/bbolt v1.3.2/go.mod h1:iRUV2dpdMOn7Bo10OQBFzIJO9kkE559Wcmn+qkEiiKk=
