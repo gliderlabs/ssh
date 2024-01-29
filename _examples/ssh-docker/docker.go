@@ -38,7 +38,7 @@ func main() {
 	})
 
 	log.Println("starting ssh server on port 2222...")
-	log.Fatal(ssh.ListenAndServe(":2222", nil))
+	log.Fatal(ssh.ListenAndServe("localhost:2222", nil))
 }
 
 func dockerRun(cfg *container.Config, sess ssh.Session) (status int64, cleanup func(), err error) {

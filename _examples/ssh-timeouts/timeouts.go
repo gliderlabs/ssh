@@ -33,7 +33,7 @@ func main() {
 	log.Printf("connections will only last %s\n", DeadlineTimeout)
 	log.Printf("and timeout after %s of no activity\n", IdleTimeout)
 	server := &ssh.Server{
-		Addr:        ":2222",
+		Addr:        "localhost:2222",
 		MaxTimeout:  DeadlineTimeout,
 		IdleTimeout: IdleTimeout,
 	}

@@ -53,7 +53,7 @@ func main() {
 	})
 
 	log.Println("starting ssh server on port 2222...")
-	if err := ssh.ListenAndServe(":2222", nil, ssh.AllocatePty()); err != nil && err != ssh.ErrServerClosed {
+	if err := ssh.ListenAndServe("localhost:2222", nil, ssh.AllocatePty()); err != nil && err != ssh.ErrServerClosed {
 		log.Fatal(err)
 	}
 }
