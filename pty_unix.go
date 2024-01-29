@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"syscall"
 
 	"github.com/creack/pty"
 	"github.com/u-root/u-root/pkg/termios"
@@ -67,11 +66,6 @@ func (i *impl) Resize(w int, h int) (rErr error) {
 
 func (i *impl) start(c *exec.Cmd) error {
 	c.Stdin, c.Stdout, c.Stderr = i.Slave, i.Slave, i.Slave
-	if c.SysProcAttr == nil {
-		c.SysProcAttr = &syscall.SysProcAttr{}
-	}
-	c.SysProcAttr.Setctty = true
-	c.SysProcAttr.Setsid = true
 	return c.Start()
 }
 
