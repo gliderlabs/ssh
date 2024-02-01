@@ -14,12 +14,12 @@ func main() {
 
 		pty, _, ok := s.Pty()
 		if !ok {
-			_, _ = fmt.Fprintln(s, "No PTY requested.")
+			_, _ = fmt.Fprint(s, "No PTY requested.\r\n")
 			_ = s.Exit(1)
 			return
 		}
 
-		_, _ = fmt.Fprintln(s, "Got a PTY:", pty.Term)
+		_, _ = fmt.Fprint(s, "Got a PTY: "+pty.Term+"\r\n")
 	})
 
 	log.Println("starting ssh server on port 2222...")
