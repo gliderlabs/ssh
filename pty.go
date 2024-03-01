@@ -65,7 +65,7 @@ func (rw readWriterDelegate) Write(p []byte) (n int, err error) {
 // it will use that for I/O.
 // On Windows, the process execution lifecycle is not managed by Go and has to
 // be managed manually. This means that c.Wait() won't work.
-// See https://github.com/charmbracelet/x/blob/main/exp/term/windows/conpty/conpty_windows.go
+// See https://github.com/charmbracelet/x/blob/main/exp/term/conpty/conpty_windows.go
 func (p *Pty) Start(c *exec.Cmd) error {
 	return p.start(c)
 }
