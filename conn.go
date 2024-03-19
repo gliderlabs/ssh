@@ -9,13 +9,16 @@ import (
 type serverConn struct {
 	net.Conn
 
-	idleTimeout   time.Duration
-	maxDeadline   time.Time
-	closeCanceler context.CancelFunc
+	idleTimeout       time.Duration
+	handshakeDeadline time.Time
+	maxDeadline       time.Time
+	closeCanceler     context.CancelFunc
 }
 
 func (c *serverConn) Write(p []byte) (n int, err error) {
-	c.updateDeadline()
+	if c.idleTimeout > 0 {
+		c.updateDeadline()
+	}
 	n, err = c.Conn.Write(p)
 	if _, isNetErr := err.(net.Error); isNetErr && c.closeCanceler != nil {
 		c.closeCanceler()
@@ -24,7 +27,9 @@ func (c *serverConn) Write(p []byte) (n int, err error) {
 }
 
 func (c *serverConn) Read(b []byte) (n int, err error) {
-	c.updateDeadline()
+	if c.idleTimeout > 0 {
+		c.updateDeadline()
+	}
 	n, err = c.Conn.Read(b)
 	if _, isNetErr := err.(net.Error); isNetErr && c.closeCanceler != nil {
 		c.closeCanceler()
@@ -41,15 +46,18 @@ func (c *serverConn) Close() (err error) {
 }
 
 func (c *serverConn) updateDeadline() {
-	switch {
-	case c.idleTimeout > 0:
-		idleDeadline := time.Now().Add(c.idleTimeout)
-		if idleDeadline.Unix() < c.maxDeadline.Unix() || c.maxDeadline.IsZero() {
-			c.Conn.SetDeadline(idleDeadline)
-			return
-		}
-		fallthrough
-	default:
-		c.Conn.SetDeadline(c.maxDeadline)
+	deadline := c.maxDeadline
+
+	if !c.handshakeDeadline.IsZero() && (deadline.IsZero() || c.handshakeDeadline.Before(deadline)) {
+		deadline = c.handshakeDeadline
 	}
+
+	if c.idleTimeout > 0 {
+		idleDeadline := time.Now().Add(c.idleTimeout)
+		if deadline.IsZero() || idleDeadline.Before(deadline) {
+			deadline = idleDeadline
+		}
+	}
+
+	c.Conn.SetDeadline(deadline)
 }

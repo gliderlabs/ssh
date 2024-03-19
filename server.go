@@ -52,8 +52,9 @@ type Server struct {
 
 	ConnectionFailedCallback ConnectionFailedCallback // callback to report connection failures
 
-	IdleTimeout time.Duration // connection timeout when no activity, none if empty
-	MaxTimeout  time.Duration // absolute connection timeout, none if empty
+	HandshakeTimeout time.Duration // connection timeout until successful handshake, none if empty
+	IdleTimeout      time.Duration // connection timeout when no activity, none if empty
+	MaxTimeout       time.Duration // absolute connection timeout, none if empty
 
 	// ChannelHandlers allow overriding the built-in session handlers or provide
 	// extensions to the protocol, such as tcpip forwarding. By default only the
@@ -290,6 +291,10 @@ func (srv *Server) HandleConn(newConn net.Conn) {
 	if srv.MaxTimeout > 0 {
 		conn.maxDeadline = time.Now().Add(srv.MaxTimeout)
 	}
+	if srv.HandshakeTimeout > 0 {
+		conn.handshakeDeadline = time.Now().Add(srv.HandshakeTimeout)
+	}
+	conn.updateDeadline()
 	defer conn.Close()
 	sshConn, chans, reqs, err := gossh.NewServerConn(conn, srv.config(ctx))
 	if err != nil {
@@ -298,7 +303,8 @@ func (srv *Server) HandleConn(newConn net.Conn) {
 		}
 		return
 	}
-
+	conn.handshakeDeadline = time.Time{}
+	conn.updateDeadline()
 	srv.trackConn(sshConn, true)
 	defer srv.trackConn(sshConn, false)
 
