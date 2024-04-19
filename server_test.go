@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"net"
 	"testing"
 	"time"
 )
@@ -121,6 +122,39 @@ func TestServerClose(t *testing.T) {
 		return
 	case <-s.getDoneChan():
 		<-clientDoneChan
+		return
+	}
+}
+
+func TestServerHandshakeTimeout(t *testing.T) {
+	l := newLocalListener()
+
+	s := &Server{
+		HandshakeTimeout: time.Millisecond,
+	}
+	go func() {
+		if err := s.Serve(l); err != nil {
+			t.Error(err)
+		}
+	}()
+
+	conn, err := net.Dial("tcp", l.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+
+	ch := make(chan struct{})
+	go func() {
+		defer close(ch)
+		io.Copy(io.Discard, conn)
+	}()
+
+	select {
+	case <-ch:
+		return
+	case <-time.After(time.Second):
+		t.Fatal("client connection was not force-closed")
 		return
 	}
 }
