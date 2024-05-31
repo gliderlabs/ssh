@@ -7,7 +7,7 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/charmbracelet/x/exp/term/termios"
+	"github.com/charmbracelet/x/termios"
 	"github.com/creack/pty"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/sys/unix"
@@ -54,7 +54,7 @@ func (i *impl) Resize(w int, h int) (rErr error) {
 	}
 
 	return conn.Control(func(fd uintptr) {
-		rErr = termios.SetWinSize(int(fd), &unix.Winsize{
+		rErr = termios.SetWinsize(int(fd), &unix.Winsize{
 			Row: uint16(h),
 			Col: uint16(w),
 		})
@@ -141,7 +141,7 @@ func applyTerminalModesToFd(fd uintptr, width int, height int, modes ssh.Termina
 	); err != nil {
 		return err
 	}
-	return termios.SetWinSize(int(fd), &unix.Winsize{
+	return termios.SetWinsize(int(fd), &unix.Winsize{
 		Row: uint16(height),
 		Col: uint16(width),
 	})
