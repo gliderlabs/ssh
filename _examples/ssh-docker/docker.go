@@ -6,7 +6,6 @@ import (
 	"io"
 	"log"
 
-	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
@@ -42,21 +41,25 @@ func main() {
 }
 
 func dockerRun(cfg *container.Config, sess ssh.Session) (status int64, cleanup func(), err error) {
-	docker, err := client.NewEnvClient()
+	docker, err := client.NewClientWithOpts()
 	if err != nil {
 		panic(err)
 	}
 	status = 255
 	cleanup = func() {}
 	ctx := context.Background()
-	res, err := docker.ContainerCreate(ctx, cfg, nil, nil, "")
+	res, err := docker.ContainerCreate(ctx, cfg, nil, nil, nil, "")
 	if err != nil {
 		return
 	}
 	cleanup = func() {
-		docker.ContainerRemove(ctx, res.ID, types.ContainerRemoveOptions{})
+		docker.ContainerRemove(
+			ctx,
+			res.ID,
+			container.RemoveOptions{},
+		)
 	}
-	opts := types.ContainerAttachOptions{
+	opts := container.AttachOptions{
 		Stdin:  cfg.AttachStdin,
 		Stdout: cfg.AttachStdout,
 		Stderr: cfg.AttachStderr,
@@ -67,7 +70,7 @@ func dockerRun(cfg *container.Config, sess ssh.Session) (status int64, cleanup f
 		return
 	}
 	cleanup = func() {
-		docker.ContainerRemove(ctx, res.ID, types.ContainerRemoveOptions{})
+		docker.ContainerRemove(ctx, res.ID, container.RemoveOptions{})
 		stream.Close()
 	}
 
@@ -88,7 +91,7 @@ func dockerRun(cfg *container.Config, sess ssh.Session) (status int64, cleanup f
 		io.Copy(stream.Conn, sess)
 	}()
 
-	err = docker.ContainerStart(ctx, res.ID, types.ContainerStartOptions{})
+	err = docker.ContainerStart(ctx, res.ID, container.StartOptions{})
 	if err != nil {
 		return
 	}
@@ -96,7 +99,7 @@ func dockerRun(cfg *container.Config, sess ssh.Session) (status int64, cleanup f
 		_, winCh, _ := sess.Pty()
 		go func() {
 			for win := range winCh {
-				err := docker.ContainerResize(ctx, res.ID, types.ResizeOptions{
+				err := docker.ContainerResize(ctx, res.ID, container.ResizeOptions{
 					Height: uint(win.Height),
 					Width:  uint(win.Width),
 				})
