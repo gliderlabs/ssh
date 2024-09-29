@@ -254,6 +254,11 @@ func (sess *session) handleRequests(reqs <-chan *gossh.Request) {
 				continue
 			}
 
+			if sess.handler == nil {
+				req.Reply(false, nil)
+				continue
+			}
+
 			sess.handled = true
 			req.Reply(true, nil)
 
