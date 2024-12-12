@@ -108,6 +108,10 @@ func newContext(srv *Server) (*sshContext, context.CancelFunc) {
 	return ctx, cancel
 }
 
+func resetPermissions(ctx Context) {
+	ctx.Permissions().Permissions = &gossh.Permissions{}
+}
+
 // this is separate from newContext because we will get ConnMetadata
 // at different points so it needs to be applied separately
 func applyConnMetadata(ctx Context, conn gossh.ConnMetadata) {
