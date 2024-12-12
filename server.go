@@ -147,6 +147,7 @@ func (srv *Server) config(ctx Context) *gossh.ServerConfig {
 	}
 	if srv.PasswordHandler != nil {
 		config.PasswordCallback = func(conn gossh.ConnMetadata, password []byte) (*gossh.Permissions, error) {
+			resetPermissions(ctx)
 			applyConnMetadata(ctx, conn)
 			if ok := srv.PasswordHandler(ctx, string(password)); !ok {
 				return ctx.Permissions().Permissions, fmt.Errorf("permission denied")
@@ -156,6 +157,7 @@ func (srv *Server) config(ctx Context) *gossh.ServerConfig {
 	}
 	if srv.PublicKeyHandler != nil {
 		config.PublicKeyCallback = func(conn gossh.ConnMetadata, key gossh.PublicKey) (*gossh.Permissions, error) {
+			resetPermissions(ctx)
 			applyConnMetadata(ctx, conn)
 			if ok := srv.PublicKeyHandler(ctx, key); !ok {
 				return ctx.Permissions().Permissions, fmt.Errorf("permission denied")
@@ -166,6 +168,7 @@ func (srv *Server) config(ctx Context) *gossh.ServerConfig {
 	}
 	if srv.KeyboardInteractiveHandler != nil {
 		config.KeyboardInteractiveCallback = func(conn gossh.ConnMetadata, challenger gossh.KeyboardInteractiveChallenge) (*gossh.Permissions, error) {
+			resetPermissions(ctx)
 			applyConnMetadata(ctx, conn)
 			if ok := srv.KeyboardInteractiveHandler(ctx, challenger); !ok {
 				return ctx.Permissions().Permissions, fmt.Errorf("permission denied")
@@ -298,6 +301,11 @@ func (srv *Server) HandleConn(newConn net.Conn) {
 		}
 		return
 	}
+
+	// Additionally, now that the connection was authed, we can take the
+	// permissions off of the gossh.Conn and re-attach them to the Permissions
+	// object stored in the Context.
+	ctx.Permissions().Permissions = sshConn.Permissions
 
 	srv.trackConn(sshConn, true)
 	defer srv.trackConn(sshConn, false)
