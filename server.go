@@ -2,6 +2,7 @@ package ssh
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net"
@@ -27,6 +28,16 @@ type ChannelHandler func(srv *Server, conn *gossh.ServerConn, newChan gossh.NewC
 
 var DefaultChannelHandlers = map[string]ChannelHandler{
 	"session": DefaultSessionHandler,
+}
+
+var permissionsPublicKeyExt = "gliderlabs/ssh.PublicKey"
+
+func ensureNoPKInPermissions(ctx Context) error {
+	if _, ok := ctx.Permissions().Permissions.Extensions[permissionsPublicKeyExt]; ok {
+		return errors.New("misconfigured server: public key incorrectly set")
+	}
+
+	return nil
 }
 
 // Server defines parameters for running an SSH server. The zero value for
@@ -149,7 +160,12 @@ func (srv *Server) config(ctx Context) *gossh.ServerConfig {
 		config.PasswordCallback = func(conn gossh.ConnMetadata, password []byte) (*gossh.Permissions, error) {
 			resetPermissions(ctx)
 			applyConnMetadata(ctx, conn)
-			if ok := srv.PasswordHandler(ctx, string(password)); !ok {
+			err := ensureNoPKInPermissions(ctx)
+			if err != nil {
+				return ctx.Permissions().Permissions, err
+			}
+			ok := srv.PasswordHandler(ctx, string(password))
+			if !ok {
 				return ctx.Permissions().Permissions, fmt.Errorf("permission denied")
 			}
 			return ctx.Permissions().Permissions, nil
@@ -159,10 +175,18 @@ func (srv *Server) config(ctx Context) *gossh.ServerConfig {
 		config.PublicKeyCallback = func(conn gossh.ConnMetadata, key gossh.PublicKey) (*gossh.Permissions, error) {
 			resetPermissions(ctx)
 			applyConnMetadata(ctx, conn)
-			if ok := srv.PublicKeyHandler(ctx, key); !ok {
+			err := ensureNoPKInPermissions(ctx)
+			if err != nil {
+				return ctx.Permissions().Permissions, err
+			}
+			ok := srv.PublicKeyHandler(ctx, key)
+			if !ok {
 				return ctx.Permissions().Permissions, fmt.Errorf("permission denied")
 			}
-			ctx.SetValue(ContextKeyPublicKey, key)
+
+			pkStr := base64.StdEncoding.EncodeToString(key.Marshal())
+			ctx.Permissions().Permissions.Extensions[permissionsPublicKeyExt] = pkStr
+
 			return ctx.Permissions().Permissions, nil
 		}
 	}
@@ -170,7 +194,12 @@ func (srv *Server) config(ctx Context) *gossh.ServerConfig {
 		config.KeyboardInteractiveCallback = func(conn gossh.ConnMetadata, challenger gossh.KeyboardInteractiveChallenge) (*gossh.Permissions, error) {
 			resetPermissions(ctx)
 			applyConnMetadata(ctx, conn)
-			if ok := srv.KeyboardInteractiveHandler(ctx, challenger); !ok {
+			ok := srv.KeyboardInteractiveHandler(ctx, challenger)
+			err := ensureNoPKInPermissions(ctx)
+			if err != nil {
+				return ctx.Permissions().Permissions, err
+			}
+			if !ok {
 				return ctx.Permissions().Permissions, fmt.Errorf("permission denied")
 			}
 			return ctx.Permissions().Permissions, nil
@@ -300,6 +329,30 @@ func (srv *Server) HandleConn(newConn net.Conn) {
 			srv.ConnectionFailedCallback(conn, err)
 		}
 		return
+	}
+
+	if sshConn.Permissions != nil {
+		// Now that the connection was authed, if the permissionsPublicKeyExt was
+		// attached, we need to re-parse it as a public key.
+		if keyData, ok := sshConn.Permissions.Extensions[permissionsPublicKeyExt]; ok {
+			decodedData, err := base64.StdEncoding.DecodeString(keyData)
+			if err != nil {
+				if srv.ConnectionFailedCallback != nil {
+					srv.ConnectionFailedCallback(conn, err)
+				}
+				return
+			}
+
+			key, err := gossh.ParsePublicKey(decodedData)
+			if err != nil {
+				if srv.ConnectionFailedCallback != nil {
+					srv.ConnectionFailedCallback(conn, err)
+				}
+				return
+			}
+
+			ctx.SetValue(ContextKeyPublicKey, key)
+		}
 	}
 
 	// Additionally, now that the connection was authed, we can take the
