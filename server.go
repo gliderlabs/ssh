@@ -43,6 +43,7 @@ type Server struct {
 	KeyboardInteractiveHandler    KeyboardInteractiveHandler    // keyboard-interactive authentication handler
 	PasswordHandler               PasswordHandler               // password authentication handler
 	PublicKeyHandler              PublicKeyHandler              // public key authentication handler
+	AuthLogHandler                AuthLogHandler                // authentication logger handler
 	PtyCallback                   PtyCallback                   // callback for allowing PTY sessions, allows all if nil
 	ConnCallback                  ConnCallback                  // optional callback for wrapping net.Conn before handling
 	LocalPortForwardingCallback   LocalPortForwardingCallback   // callback for allowing local port forwarding, denies all if nil
@@ -162,6 +163,12 @@ func (srv *Server) config(ctx Context) *gossh.ServerConfig {
 			}
 			ctx.SetValue(ContextKeyPublicKey, key)
 			return ctx.Permissions().Permissions, nil
+		}
+	}
+	if srv.AuthLogHandler != nil {
+		config.AuthLogCallback = func(conn gossh.ConnMetadata, method string, err error) {
+			applyConnMetadata(ctx, conn)
+			srv.AuthLogHandler(ctx, method, err)
 		}
 	}
 	if srv.KeyboardInteractiveHandler != nil {
