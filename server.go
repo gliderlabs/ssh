@@ -128,9 +128,9 @@ func (srv *Server) config(ctx Context) *gossh.ServerConfig {
 	for _, signer := range srv.HostSigners {
 		config.AddHostKey(signer)
 	}
-	if srv.PasswordHandler == nil && srv.PublicKeyHandler == nil && srv.KeyboardInteractiveHandler == nil {
-		config.NoClientAuth = true
-	}
+	// set NoClientAuth to true if: (it is set to true) or ((all auth callbacks on the ServerConfig are nil) and (all auth callbacks on the *Server are nil))
+	// effectively, either it's set explicitly as true, or there's no auth config anywhere.
+	config.NoClientAuth = config.NoClientAuth || ((config.PasswordCallback == nil && config.PublicKeyCallback == nil && config.KeyboardInteractiveCallback == nil) && (srv.PasswordHandler == nil && srv.PublicKeyHandler == nil && srv.KeyboardInteractiveHandler == nil))
 	if srv.Version != "" {
 		config.ServerVersion = "SSH-2.0-" + srv.Version
 	}
