@@ -16,61 +16,134 @@ func generateSigner() (ssh.Signer, error) {
 	return ssh.NewSignerFromKey(key)
 }
 
-func parsePtyRequest(s []byte) (pty Pty, ok bool) {
-	term, s, ok := parseString(s)
+func parsePtyRequest(payload []byte) (pty Pty, ok bool) {
+	// From https://datatracker.ietf.org/doc/html/rfc4254
+	// 6.2.  Requesting a Pseudo-Terminal
+	// A pseudo-terminal can be allocated for the session by sending the
+	// following message.
+	//    byte      SSH_MSG_CHANNEL_REQUEST
+	//    uint32    recipient channel
+	//    string    "pty-req"
+	//    boolean   want_reply
+	//    string    TERM environment variable value (e.g., vt100)
+	//    uint32    terminal width, characters (e.g., 80)
+	//    uint32    terminal height, rows (e.g., 24)
+	//    uint32    terminal width, pixels (e.g., 640)
+	//    uint32    terminal height, pixels (e.g., 480)
+	//    string    encoded terminal modes
+
+	// The payload starts from the TERM variable.
+	term, rem, ok := parseString(payload)
 	if !ok {
 		return
 	}
-	width32, s, ok := parseUint32(s)
+	win, rem, ok := parseWindow(rem)
 	if !ok {
 		return
 	}
-	height32, _, ok := parseUint32(s)
+	modes, ok := parseTerminalModes(rem)
 	if !ok {
 		return
 	}
 	pty = Pty{
-		Term: term,
-		Window: Window{
-			Width:  int(width32),
-			Height: int(height32),
-		},
+		Term:   term,
+		Window: win,
+		Modes:  modes,
 	}
 	return
 }
 
-func parseWinchRequest(s []byte) (win Window, ok bool) {
-	width32, s, ok := parseUint32(s)
-	if width32 < 1 {
-		ok = false
-	}
+func parseTerminalModes(in []byte) (modes ssh.TerminalModes, ok bool) {
+	// From https://datatracker.ietf.org/doc/html/rfc4254
+	// 8.  Encoding of Terminal Modes
+	//
+	//  All 'encoded terminal modes' (as passed in a pty request) are encoded
+	//  into a byte stream.  It is intended that the coding be portable
+	//  across different environments.  The stream consists of opcode-
+	//  argument pairs wherein the opcode is a byte value.  Opcodes 1 to 159
+	//  have a single uint32 argument.  Opcodes 160 to 255 are not yet
+	//  defined, and cause parsing to stop (they should only be used after
+	//  any other data).  The stream is terminated by opcode TTY_OP_END
+	//  (0x00).
+	//
+	//  The client SHOULD put any modes it knows about in the stream, and the
+	//  server MAY ignore any modes it does not know about.  This allows some
+	//  degree of machine-independence, at least between systems that use a
+	//  POSIX-like tty interface.  The protocol can support other systems as
+	//  well, but the client may need to fill reasonable values for a number
+	//  of parameters so the server pty gets set to a reasonable mode (the
+	//  server leaves all unspecified mode bits in their default values, and
+	//  only some combinations make sense).
+	_, rem, ok := parseUint32(in)
 	if !ok {
 		return
 	}
-	height32, _, ok := parseUint32(s)
-	if height32 < 1 {
-		ok = false
+	const ttyOpEnd = 0
+	for len(rem) > 0 {
+		if modes == nil {
+			modes = make(ssh.TerminalModes)
+		}
+		code := uint8(rem[0])
+		rem = rem[1:]
+		if code == ttyOpEnd || code > 160 {
+			break
+		}
+		var val uint32
+		val, rem, ok = parseUint32(rem)
+		if !ok {
+			return
+		}
+		modes[code] = val
 	}
+	ok = true
+	return
+}
+
+func parseWindow(s []byte) (win Window, rem []byte, ok bool) {
+	// 6.7.  Window Dimension Change Message
+	// When the window (terminal) size changes on the client side, it MAY
+	// send a message to the other side to inform it of the new dimensions.
+
+	//   byte      SSH_MSG_CHANNEL_REQUEST
+	//   uint32    recipient channel
+	//   string    "window-change"
+	//   boolean   FALSE
+	//   uint32    terminal width, columns
+	//   uint32    terminal height, rows
+	//   uint32    terminal width, pixels
+	//   uint32    terminal height, pixels
+	wCols, rem, ok := parseUint32(s)
+	if !ok {
+		return
+	}
+	hRows, rem, ok := parseUint32(rem)
+	if !ok {
+		return
+	}
+	wPixels, rem, ok := parseUint32(rem)
+	if !ok {
+		return
+	}
+	hPixels, rem, ok := parseUint32(rem)
 	if !ok {
 		return
 	}
 	win = Window{
-		Width:  int(width32),
-		Height: int(height32),
+		Width:        int(wCols),
+		Height:       int(hRows),
+		WidthPixels:  int(wPixels),
+		HeightPixels: int(hPixels),
 	}
 	return
 }
 
-func parseString(in []byte) (out string, rest []byte, ok bool) {
-	if len(in) < 4 {
+func parseString(in []byte) (out string, rem []byte, ok bool) {
+	length, rem, ok := parseUint32(in)
+	if uint32(len(rem)) < length || !ok {
+		ok = false
 		return
 	}
-	length := binary.BigEndian.Uint32(in)
-	if uint32(len(in)) < 4+length {
-		return
-	}
-	out = string(in[4 : 4+length])
-	rest = in[4+length:]
+	out, rem = string(rem[:length]), rem[length:]
 	ok = true
 	return
 }

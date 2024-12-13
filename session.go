@@ -346,7 +346,7 @@ func (sess *session) handleRequests(reqs <-chan *gossh.Request) {
 				req.Reply(false, nil)
 				continue
 			}
-			win, ok := parseWinchRequest(req.Payload)
+			win, _, ok := parseWindow(req.Payload)
 			if ok {
 				sess.pty.Window = win
 				sess.winch <- win

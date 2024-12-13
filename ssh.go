@@ -72,16 +72,44 @@ type ServerConfigCallback func(ctx Context) *gossh.ServerConfig
 type ConnectionFailedCallback func(conn net.Conn, err error)
 
 // Window represents the size of a PTY window.
+//
+// From https://datatracker.ietf.org/doc/html/rfc4254#section-6.2
+//
+// Zero dimension parameters MUST be ignored. The character/row dimensions
+// override the pixel dimensions (when nonzero).  Pixel dimensions refer
+// to the drawable area of the window.
 type Window struct {
-	Width  int
+	// Width is the number of columns.
+	// It overrides WidthPixels.
+	Width int
+	// Height is the number of rows.
+	// It overrides HeightPixels.
 	Height int
+
+	// WidthPixels is the drawable width of the window, in pixels.
+	WidthPixels int
+	// HeightPixels is the drawable height of the window, in pixels.
+	HeightPixels int
 }
 
 // Pty represents a PTY request and configuration.
 type Pty struct {
-	Term   string
+	// Term is the TERM environment variable value.
+	Term string
+
+	// Window is the Window sent as part of the pty-req.
 	Window Window
-	// HELP WANTED: terminal modes!
+
+	// Modes represent a mapping of Terminal Mode opcode to value as it was
+	// requested by the client as part of the pty-req. These are outlined as
+	// part of https://datatracker.ietf.org/doc/html/rfc4254#section-8.
+	//
+	// The opcodes are defined as constants in golang.org/x/crypto/ssh (VINTR,VQUIT,etc.).
+	// Boolean opcodes have values 0 or 1.
+	//
+	// Note: golang.org/x/crypto/ssh currently (2022-03-12) doesn't have a
+	// definition for opcode 42 "iutf8" which was introduced in https://datatracker.ietf.org/doc/html/rfc8160.
+	Modes gossh.TerminalModes
 }
 
 // Serve accepts incoming SSH connections on the listener l, creating a new
