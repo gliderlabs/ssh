@@ -14,10 +14,6 @@ func main() {
 	forwardHandler := &ssh.ForwardedTCPHandler{}
 
 	server := ssh.Server{
-		LocalPortForwardingCallback: ssh.LocalPortForwardingCallback(func(ctx ssh.Context, dhost string, dport uint32) bool {
-			log.Println("Accepted forward", dhost, dport)
-			return true
-		}),
 		Addr: ":2222",
 		Handler: ssh.Handler(func(s ssh.Session) {
 			io.WriteString(s, "Remote forwarding available...\n")
