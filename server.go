@@ -3,7 +3,6 @@ package ssh
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net"
 	"sync"
 	"time"
@@ -28,6 +27,8 @@ type ChannelHandler func(srv *Server, conn *gossh.ServerConn, newChan gossh.NewC
 var DefaultChannelHandlers = map[string]ChannelHandler{
 	"session": DefaultSessionHandler,
 }
+
+var ErrPermissionDenied = errors.New("permission denied")
 
 // Server defines parameters for running an SSH server. The zero value for
 // Server is a valid configuration. When both PasswordHandler and
@@ -149,7 +150,7 @@ func (srv *Server) config(ctx Context) *gossh.ServerConfig {
 		config.PasswordCallback = func(conn gossh.ConnMetadata, password []byte) (*gossh.Permissions, error) {
 			applyConnMetadata(ctx, conn)
 			if ok := srv.PasswordHandler(ctx, string(password)); !ok {
-				return ctx.Permissions().Permissions, fmt.Errorf("permission denied")
+				return ctx.Permissions().Permissions, ErrPermissionDenied
 			}
 			return ctx.Permissions().Permissions, nil
 		}
@@ -158,7 +159,7 @@ func (srv *Server) config(ctx Context) *gossh.ServerConfig {
 		config.PublicKeyCallback = func(conn gossh.ConnMetadata, key gossh.PublicKey) (*gossh.Permissions, error) {
 			applyConnMetadata(ctx, conn)
 			if ok := srv.PublicKeyHandler(ctx, key); !ok {
-				return ctx.Permissions().Permissions, fmt.Errorf("permission denied")
+				return ctx.Permissions().Permissions, ErrPermissionDenied
 			}
 			ctx.SetValue(ContextKeyPublicKey, key)
 			return ctx.Permissions().Permissions, nil
@@ -168,7 +169,7 @@ func (srv *Server) config(ctx Context) *gossh.ServerConfig {
 		config.KeyboardInteractiveCallback = func(conn gossh.ConnMetadata, challenger gossh.KeyboardInteractiveChallenge) (*gossh.Permissions, error) {
 			applyConnMetadata(ctx, conn)
 			if ok := srv.KeyboardInteractiveHandler(ctx, challenger); !ok {
-				return ctx.Permissions().Permissions, fmt.Errorf("permission denied")
+				return ctx.Permissions().Permissions, ErrPermissionDenied
 			}
 			return ctx.Permissions().Permissions, nil
 		}
