@@ -71,6 +71,9 @@ type ServerConfigCallback func(ctx Context) *gossh.ServerConfig
 // Please note: the net.Conn is likely to be closed at this point
 type ConnectionFailedCallback func(conn net.Conn, err error)
 
+// ConnectionFailedCallback is a hook for handling closed connections
+type ConnectionClosedCallback func()
+
 // Window represents the size of a PTY window.
 type Window struct {
 	Width  int

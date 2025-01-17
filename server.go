@@ -51,6 +51,7 @@ type Server struct {
 	SessionRequestCallback        SessionRequestCallback        // callback for allowing or denying SSH sessions
 
 	ConnectionFailedCallback ConnectionFailedCallback // callback to report connection failures
+	ConnectionClosedCallback ConnectionClosedCallback // callback to report closed connections
 
 	IdleTimeout time.Duration // connection timeout when no activity, none if empty
 	MaxTimeout  time.Duration // absolute connection timeout, none if empty
@@ -316,6 +317,9 @@ func (srv *Server) HandleConn(newConn net.Conn) {
 			continue
 		}
 		go handler(srv, sshConn, ch, ctx)
+	}
+	if srv.ConnectionClosedCallback != nil {
+		srv.ConnectionClosedCallback()
 	}
 }
 
