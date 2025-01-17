@@ -124,3 +124,23 @@ func TestServerClose(t *testing.T) {
 		return
 	}
 }
+
+func TestServerCloseConnectionCallback(t *testing.T) {
+	connectionCloseCallbackCalled := make(chan struct{})
+	testBytes := []byte("Hello world\n")
+	_, _, cleanup := newTestSession(t, &Server{
+		Handler: func(s Session) {
+			s.Write(testBytes)
+		},
+		ConnectionClosedCallback: func() {
+			connectionCloseCallbackCalled <- struct{}{}
+		},
+	}, nil)
+	cleanup()
+
+	select {
+	case <-connectionCloseCallbackCalled:
+	case <-time.After(10 * time.Millisecond):
+		t.Fail()
+	}
+}
