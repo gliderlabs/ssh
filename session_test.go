@@ -230,9 +230,9 @@ func TestPty(t *testing.T) {
 
 func TestPtyResize(t *testing.T) {
 	t.Parallel()
-	winch0 := Window{40, 80}
-	winch1 := Window{80, 160}
-	winch2 := Window{20, 40}
+	winch0 := Window{Width: 40, Height: 80}
+	winch1 := Window{Width: 80, Height: 160}
+	winch2 := Window{Width: 20, Height: 40}
 	winches := make(chan Window)
 	done := make(chan bool)
 	session, _, cleanup := newTestSession(t, &Server{

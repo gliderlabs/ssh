@@ -35,11 +35,12 @@ type Option func(*Server) error
 // Handler is a callback for handling established SSH sessions.
 type Handler func(Session)
 
-// BannerHandler is a callback for displaying the server banner.
-type BannerHandler func(ctx Context) string
-
 // PublicKeyHandler is a callback for performing public key authentication.
 type PublicKeyHandler func(ctx Context, key PublicKey) bool
+
+type NoClientAuthHandler func(ctx Context) error
+
+type BannerHandler func(ctx Context) string
 
 // PasswordHandler is a callback for performing password authentication.
 type PasswordHandler func(ctx Context, password string) bool
@@ -73,15 +74,27 @@ type ConnectionFailedCallback func(conn net.Conn, err error)
 
 // Window represents the size of a PTY window.
 type Window struct {
-	Width  int
-	Height int
+	Width        int
+	Height       int
+	WidthPixels  int
+	HeightPixels int
 }
 
 // Pty represents a PTY request and configuration.
 type Pty struct {
-	Term   string
+	// Term is the TERM environment variable value.
+	Term string
+
+	// Window is the Window sent as part of the pty-req.
 	Window Window
-	// HELP WANTED: terminal modes!
+
+	// Modes represent a mapping of Terminal Mode opcode to value as it was
+	// requested by the client as part of the pty-req. These are outlined as
+	// part of https://datatracker.ietf.org/doc/html/rfc4254#section-8.
+	//
+	// The opcodes are defined as constants in golang.org/x/crypto/ssh (VINTR,VQUIT,etc.).
+	// Boolean opcodes have values 0 or 1.
+	Modes gossh.TerminalModes
 }
 
 // Serve accepts incoming SSH connections on the listener l, creating a new
@@ -118,7 +131,8 @@ func Handle(handler Handler) {
 
 // KeysEqual is constant time compare of the keys to avoid timing attacks.
 func KeysEqual(ak, bk PublicKey) bool {
-	// avoid panic if one of the keys is nil, return false instead
+
+	//avoid panic if one of the keys is nil, return false instead
 	if ak == nil || bk == nil {
 		return false
 	}
