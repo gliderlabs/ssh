@@ -47,6 +47,8 @@ type Server struct {
 	ConnCallback                  ConnCallback                  // optional callback for wrapping net.Conn before handling
 	LocalPortForwardingCallback   LocalPortForwardingCallback   // callback for allowing local port forwarding, denies all if nil
 	ReversePortForwardingCallback ReversePortForwardingCallback // callback for allowing reverse port forwarding, denies all if nil
+	LocalUnixForwardingCallback   LocalUnixForwardingCallback   // callback for allowing local unix forwarding (direct-streamlocal@openssh.com), denies all if nil
+	ReverseUnixForwardingCallback ReverseUnixForwardingCallback // callback for allowing reverse unix forwarding (streamlocal-forward@openssh.com), denies all if nil
 	ServerConfigCallback          ServerConfigCallback          // callback for configuring detailed SSH options
 	SessionRequestCallback        SessionRequestCallback        // callback for allowing or denying SSH sessions
 
