@@ -44,6 +44,9 @@ type PublicKeyHandler func(ctx Context, key PublicKey) bool
 // PasswordHandler is a callback for performing password authentication.
 type PasswordHandler func(ctx Context, password string) bool
 
+// PasswordHandlerE is like PasswordHandler, but returns error
+type PasswordHandlerE func(ctx Context, password string) error
+
 // KeyboardInteractiveHandler is a callback for performing keyboard-interactive authentication.
 type KeyboardInteractiveHandler func(ctx Context, challenger gossh.KeyboardInteractiveChallenge) bool
 

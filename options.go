@@ -14,6 +14,14 @@ func PasswordAuth(fn PasswordHandler) Option {
 	}
 }
 
+// PasswordAuthE returns a functional option that sets PasswordHandlerE on the server.
+func PasswordAuthE(fn PasswordHandlerE) Option {
+	return func(srv *Server) error {
+		srv.PasswordHandlerE = fn
+		return nil
+	}
+}
+
 // PublicKeyAuth returns a functional option that sets PublicKeyHandler on the server.
 func PublicKeyAuth(fn PublicKeyHandler) Option {
 	return func(srv *Server) error {

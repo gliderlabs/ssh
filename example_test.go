@@ -1,6 +1,7 @@
 package ssh_test
 
 import (
+	"fmt"
 	"io"
 	"os"
 
@@ -17,6 +18,17 @@ func ExamplePasswordAuth() {
 	ssh.ListenAndServe(":2222", nil,
 		ssh.PasswordAuth(func(ctx ssh.Context, pass string) bool {
 			return pass == "secret"
+		}),
+	)
+}
+
+func ExamplePasswordAuthE() {
+	ssh.ListenAndServe(":2222", nil,
+		ssh.PasswordAuthE(func(ctx ssh.Context, pass string) error {
+			if pass == "secret" {
+				return nil
+			}
+			return fmt.Errorf("password incorrect")
 		}),
 	)
 }
