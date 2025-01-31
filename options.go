@@ -22,6 +22,13 @@ func PublicKeyAuth(fn PublicKeyHandler) Option {
 	}
 }
 
+func AuthLog(fn AuthLogHandler) Option {
+	return func(srv *Server) error {
+		srv.AuthLogHandler = fn
+		return nil
+	}
+}
+
 // HostKeyFile returns a functional option that adds HostSigners to the server
 // from a PEM file at filepath.
 func HostKeyFile(filepath string) Option {
