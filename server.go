@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	gossh "golang.org/x/crypto/ssh"
@@ -70,12 +71,12 @@ type Server struct {
 	// handlers, but handle named subsystems.
 	SubsystemHandlers map[string]SubsystemHandler
 
+	inShutdown atomic.Bool // true when server is in shutdown
 	listenerWg sync.WaitGroup
 	mu         sync.RWMutex
 	listeners  map[net.Listener]struct{}
 	conns      map[*gossh.ServerConn]struct{}
 	connWg     sync.WaitGroup
-	doneChan   chan struct{}
 }
 
 func (srv *Server) ensureHostSigner() error {
@@ -191,11 +192,20 @@ func (srv *Server) Handle(fn Handler) {
 // Close returns any error returned from closing the Server's
 // underlying Listener(s).
 func (srv *Server) Close() error {
+	srv.inShutdown.Store(true)
 	srv.mu.Lock()
 	defer srv.mu.Unlock()
 
-	srv.closeDoneChanLocked()
 	err := srv.closeListenersLocked()
+
+	// Unlock srv.mu while waiting for listenerWg.
+	// The group Add and Done calls are made with srv.mu held,
+	// to avoid adding a new listener in the window between
+	// us setting inShutdown above and waiting here.
+	srv.mu.Unlock()
+	srv.listenerWg.Wait()
+	srv.mu.Lock()
+
 	for c := range srv.conns {
 		c.Close()
 		delete(srv.conns, c)
@@ -209,9 +219,9 @@ func (srv *Server) Close() error {
 // If the provided context expires before the shutdown is complete,
 // then the context's error is returned.
 func (srv *Server) Shutdown(ctx context.Context) error {
+	srv.inShutdown.Store(true)
 	srv.mu.Lock()
 	lnerr := srv.closeListenersLocked()
-	srv.closeDoneChanLocked()
 	srv.mu.Unlock()
 
 	finished := make(chan struct{}, 1)
@@ -227,6 +237,10 @@ func (srv *Server) Shutdown(ctx context.Context) error {
 	case <-finished:
 		return lnerr
 	}
+}
+
+func (s *Server) shuttingDown() bool {
+	return s.inShutdown.Load()
 }
 
 // Serve accepts incoming connections on the Listener l, creating a new
@@ -245,15 +259,15 @@ func (srv *Server) Serve(l net.Listener) error {
 	}
 	var tempDelay time.Duration
 
-	srv.trackListener(l, true)
+	if !srv.trackListener(l, true) {
+		return ErrServerClosed
+	}
 	defer srv.trackListener(l, false)
 	for {
 		conn, e := l.Accept()
 		if e != nil {
-			select {
-			case <-srv.getDoneChan():
+			if srv.shuttingDown() {
 				return ErrServerClosed
-			default:
 			}
 			if ne, ok := e.(net.Error); ok && ne.Temporary() {
 				if tempDelay == 0 {
@@ -393,32 +407,6 @@ func (srv *Server) SetOption(option Option) error {
 	return option(srv)
 }
 
-func (srv *Server) getDoneChan() <-chan struct{} {
-	srv.mu.Lock()
-	defer srv.mu.Unlock()
-
-	return srv.getDoneChanLocked()
-}
-
-func (srv *Server) getDoneChanLocked() chan struct{} {
-	if srv.doneChan == nil {
-		srv.doneChan = make(chan struct{})
-	}
-	return srv.doneChan
-}
-
-func (srv *Server) closeDoneChanLocked() {
-	ch := srv.getDoneChanLocked()
-	select {
-	case <-ch:
-		// Already closed. Don't close again.
-	default:
-		// Safe to close here. We're the only closer, guarded
-		// by srv.mu.
-		close(ch)
-	}
-}
-
 func (srv *Server) closeListenersLocked() error {
 	var err error
 	for ln := range srv.listeners {
@@ -430,7 +418,7 @@ func (srv *Server) closeListenersLocked() error {
 	return err
 }
 
-func (srv *Server) trackListener(ln net.Listener, add bool) {
+func (srv *Server) trackListener(ln net.Listener, add bool) bool {
 	srv.mu.Lock()
 	defer srv.mu.Unlock()
 
@@ -438,10 +426,8 @@ func (srv *Server) trackListener(ln net.Listener, add bool) {
 		srv.listeners = make(map[net.Listener]struct{})
 	}
 	if add {
-		// If the *Server is being reused after a previous
-		// Close or Shutdown, reset its doneChan:
-		if len(srv.listeners) == 0 && len(srv.conns) == 0 {
-			srv.doneChan = nil
+		if srv.shuttingDown() {
+			return false
 		}
 		srv.listeners[ln] = struct{}{}
 		srv.listenerWg.Add(1)
@@ -449,6 +435,7 @@ func (srv *Server) trackListener(ln net.Listener, add bool) {
 		delete(srv.listeners, ln)
 		srv.listenerWg.Done()
 	}
+	return true
 }
 
 func (srv *Server) trackConn(c *gossh.ServerConn, add bool) {
