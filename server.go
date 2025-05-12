@@ -51,6 +51,7 @@ type Server struct {
 	SessionRequestCallback        SessionRequestCallback        // callback for allowing or denying SSH sessions
 
 	ConnectionFailedCallback ConnectionFailedCallback // callback to report connection failures
+	ConnectionCloseCallback  ConnectionCloseCallback  // callback to report connection close
 
 	HandshakeTimeout time.Duration // connection timeout until successful handshake, none if empty
 	IdleTimeout      time.Duration // connection timeout when no activity, none if empty
@@ -296,6 +297,12 @@ func (srv *Server) HandleConn(newConn net.Conn) {
 	}
 	conn.updateDeadline()
 	defer conn.Close()
+	defer func() {
+		if srv.ConnectionCloseCallback != nil {
+			srv.ConnectionCloseCallback(conn)
+		}
+	}()
+
 	sshConn, chans, reqs, err := gossh.NewServerConn(conn, srv.config(ctx))
 	if err != nil {
 		if srv.ConnectionFailedCallback != nil {
