@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pires/go-proxyproto"
 	gossh "golang.org/x/crypto/ssh"
 )
 
@@ -55,6 +56,8 @@ type Server struct {
 	HandshakeTimeout time.Duration // connection timeout until successful handshake, none if empty
 	IdleTimeout      time.Duration // connection timeout when no activity, none if empty
 	MaxTimeout       time.Duration // absolute connection timeout, none if empty
+
+	EnableProxyProtocol bool // Enable support for HA Proxy's and NGinx's PROXY protocol
 
 	// ChannelHandlers allow overriding the built-in session handlers or provide
 	// extensions to the protocol, such as tcpip forwarding. By default only the
@@ -235,6 +238,13 @@ func (srv *Server) Shutdown(ctx context.Context) error {
 //
 // Serve always returns a non-nil error.
 func (srv *Server) Serve(l net.Listener) error {
+	if srv.EnableProxyProtocol {
+		_, ok := l.(*proxyproto.Listener)
+		if !ok {
+			l = &proxyproto.Listener{Listener: l}
+		}
+	}
+
 	srv.ensureHandlers()
 	defer l.Close()
 	if err := srv.ensureHostSigner(); err != nil {
