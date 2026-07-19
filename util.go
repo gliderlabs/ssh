@@ -66,11 +66,12 @@ func parseString(in []byte) (out string, rest []byte, ok bool) {
 		return
 	}
 	length := binary.BigEndian.Uint32(in)
-	if uint32(len(in)) < 4+length {
+	in = in[4:]
+	if uint32(len(in)) < length {
 		return
 	}
-	out = string(in[4 : 4+length])
-	rest = in[4+length:]
+	out = string(in[:length])
+	rest = in[length:]
 	ok = true
 	return
 }
