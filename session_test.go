@@ -436,3 +436,39 @@ func TestBreakWithoutChanRegistered(t *testing.T) {
 		t.Fatalf("expected nil but got %v", err)
 	}
 }
+
+func TestPtyWindowChangeDataRace(t *testing.T) {
+	// Pty() used to copy *sess.pty while window-change mutated Window
+	// without a lock; run under -race.
+	sess := &session{
+		pty:   &Pty{Term: "xterm", Window: Window{Width: 80, Height: 24}},
+		winch: make(chan Window, 128),
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 1; i <= 1000; i++ {
+			win := Window{Width: i, Height: i}
+			sess.Lock()
+			if sess.pty == nil {
+				sess.Unlock()
+				return
+			}
+			sess.pty.Window = win
+			winch := sess.winch
+			sess.Unlock()
+			select {
+			case winch <- win:
+			default:
+			}
+		}
+	}()
+	for i := 0; i < 1000; i++ {
+		pty, _, ok := sess.Pty()
+		if !ok {
+			t.Fatal("expected pty")
+		}
+		_ = pty.Window.Width + pty.Window.Height
+	}
+	<-done
+}

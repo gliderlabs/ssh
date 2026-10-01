@@ -208,6 +208,8 @@ func (sess *session) Subsystem() string {
 }
 
 func (sess *session) Pty() (Pty, <-chan Window, bool) {
+	sess.Lock()
+	defer sess.Unlock()
 	if sess.pty != nil {
 		return *sess.pty, sess.winch, true
 	}
@@ -317,7 +319,10 @@ func (sess *session) handleRequests(reqs <-chan *gossh.Request) {
 			}
 			sess.Unlock()
 		case "pty-req":
-			if sess.handled || sess.pty != nil {
+			sess.Lock()
+			already := sess.handled || sess.pty != nil
+			sess.Unlock()
+			if already {
 				req.Reply(false, nil)
 				continue
 			}
@@ -333,25 +338,34 @@ func (sess *session) handleRequests(reqs <-chan *gossh.Request) {
 					continue
 				}
 			}
+			sess.Lock()
 			sess.pty = &ptyReq
 			sess.winch = make(chan Window, 1)
-			sess.winch <- ptyReq.Window
+			winch := sess.winch
+			sess.Unlock()
+			winch <- ptyReq.Window
 			defer func() {
 				// when reqs is closed
-				close(sess.winch)
+				close(winch)
 			}()
 			req.Reply(ok, nil)
 		case "window-change":
-			if sess.pty == nil {
+			win, ok := parseWinchRequest(req.Payload)
+			if !ok {
 				req.Reply(false, nil)
 				continue
 			}
-			win, ok := parseWinchRequest(req.Payload)
-			if ok {
-				sess.pty.Window = win
-				sess.winch <- win
+			sess.Lock()
+			if sess.pty == nil {
+				sess.Unlock()
+				req.Reply(false, nil)
+				continue
 			}
-			req.Reply(ok, nil)
+			sess.pty.Window = win
+			winch := sess.winch
+			sess.Unlock()
+			winch <- win
+			req.Reply(true, nil)
 		case agentRequestType:
 			// TODO: option/callback to allow agent forwarding
 			SetAgentRequested(sess.ctx)
