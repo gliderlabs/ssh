@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"log"
 	"os/exec"
@@ -22,9 +23,12 @@ func main() {
 		} else {
 			cmd.Env = s.Environ()
 		}
-		cmd.Stdout = s
-		cmd.Stderr = s.Stderr()
-		if err := cmd.Run(); err != nil {
+		var stderr bytes.Buffer
+		cmd.Stderr = &stderr
+		out, err := cmd.Output()
+		s.Write(bytes.ReplaceAll(out, []byte("\n"), []byte("\r\n")))
+		s.Stderr().Write(bytes.ReplaceAll(stderr.Bytes(), []byte("\n"), []byte("\r\n")))
+		if err != nil {
 			log.Println(err)
 			return
 		}

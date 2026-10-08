@@ -1,7 +1,6 @@
 package ssh
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"net"
@@ -14,6 +13,10 @@ import (
 // Session provides access to information about an SSH session and methods
 // to read and write to the SSH channel with an embedded Channel interface from
 // crypto/ssh.
+//
+// Writes, including to Stderr(), are sent to the client unmodified. When a PTY
+// is accepted, interactive clients put their terminal in raw mode, so handlers
+// that don't back it with a real PTY should write "\r\n" for line breaks.
 //
 // When Command() returns an empty slice, the user requested a shell. Otherwise
 // the user is performing an exec with those command arguments.
@@ -125,22 +128,6 @@ type session struct {
 	sigCh             chan<- Signal
 	sigBuf            []Signal
 	breakCh           chan<- bool
-}
-
-func (sess *session) Write(p []byte) (n int, err error) {
-	if sess.pty != nil {
-		m := len(p)
-		// normalize \n to \r\n when pty is accepted.
-		// this is a hardcoded shortcut since we don't support terminal modes.
-		p = bytes.Replace(p, []byte{'\n'}, []byte{'\r', '\n'}, -1)
-		p = bytes.Replace(p, []byte{'\r', '\r', '\n'}, []byte{'\r', '\n'}, -1)
-		n, err = sess.Channel.Write(p)
-		if n > m {
-			n = m
-		}
-		return
-	}
-	return sess.Channel.Write(p)
 }
 
 func (sess *session) PublicKey() PublicKey {

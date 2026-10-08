@@ -20,7 +20,7 @@ func main() {
 		}),
 		Addr: ":2222",
 		Handler: ssh.Handler(func(s ssh.Session) {
-			io.WriteString(s, "Remote forwarding available...\n")
+			io.WriteString(s, "Remote forwarding available...\r\n")
 			select {}
 		}),
 		ReversePortForwardingCallback: ssh.ReversePortForwardingCallback(func(ctx ssh.Context, host string, port uint32) bool {

@@ -11,7 +11,7 @@ ListenAndServe starts an SSH server with a given address, handler, and options. 
 handler is usually nil, which means to use DefaultHandler. Handle sets DefaultHandler:
 
   ssh.Handle(func(s ssh.Session) {
-      io.WriteString(s, "Hello world\n")
+      io.WriteString(s, "Hello world\r\n")
   })
 
   log.Fatal(ssh.ListenAndServe(":2222", nil))

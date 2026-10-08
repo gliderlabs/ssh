@@ -228,6 +228,28 @@ func TestPty(t *testing.T) {
 	<-done
 }
 
+func TestPtyWritePassthrough(t *testing.T) {
+	t.Parallel()
+	out := []byte("\x1b[2;40H|\n|\r\n")
+	session, _, cleanup := newTestSession(t, &Server{
+		Handler: func(s Session) {
+			s.Write(out)
+		},
+	}, nil)
+	defer cleanup()
+	if err := session.RequestPty("xterm", 24, 80, gossh.TerminalModes{}); err != nil {
+		t.Fatalf("expected nil but got %v", err)
+	}
+	var stdout bytes.Buffer
+	session.Stdout = &stdout
+	if err := session.Run(""); err != nil {
+		t.Fatalf("expected nil but got %v", err)
+	}
+	if !bytes.Equal(stdout.Bytes(), out) {
+		t.Fatalf("stdout = %q; want %q", stdout.Bytes(), out)
+	}
+}
+
 func TestPtyResize(t *testing.T) {
 	t.Parallel()
 	winch0 := Window{40, 80}
