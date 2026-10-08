@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"log"
@@ -12,8 +13,7 @@ import (
 func main() {
 	ssh.Handle(func(s ssh.Session) {
 		authorizedKey := gossh.MarshalAuthorizedKey(s.PublicKey())
-		io.WriteString(s, fmt.Sprintf("public key used by %s:\n", s.User()))
-		s.Write(authorizedKey)
+		io.WriteString(s, fmt.Sprintf("public key used by %s:\r\n%s\r\n", s.User(), bytes.TrimSpace(authorizedKey)))
 	})
 
 	publicKeyOption := ssh.PublicKeyAuth(func(ctx ssh.Context, key ssh.PublicKey) bool {

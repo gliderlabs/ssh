@@ -25,7 +25,7 @@ building SSH servers. The goal of the API was to make it as simple as using
 
  func main() {
      ssh.Handle(func(s ssh.Session) {
-         io.WriteString(s, "Hello world\n")
+         io.WriteString(s, "Hello world\r\n")
      })  
 
      log.Fatal(ssh.ListenAndServe(":2222", nil))

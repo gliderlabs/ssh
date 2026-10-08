@@ -9,7 +9,7 @@ import (
 
 func ExampleListenAndServe() {
 	ssh.ListenAndServe(":2222", func(s ssh.Session) {
-		io.WriteString(s, "Hello world\n")
+		io.WriteString(s, "Hello world\r\n")
 	})
 }
 

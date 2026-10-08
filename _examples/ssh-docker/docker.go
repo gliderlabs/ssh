@@ -31,7 +31,7 @@ func main() {
 		status, cleanup, err := dockerRun(cfg, sess)
 		defer cleanup()
 		if err != nil {
-			fmt.Fprintln(sess, err)
+			fmt.Fprintf(sess, "%v\r\n", err)
 			log.Println(err)
 		}
 		sess.Exit(int(status))
