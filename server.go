@@ -70,12 +70,13 @@ type Server struct {
 	// handlers, but handle named subsystems.
 	SubsystemHandlers map[string]SubsystemHandler
 
-	listenerWg sync.WaitGroup
-	mu         sync.RWMutex
-	listeners  map[net.Listener]struct{}
-	conns      map[*gossh.ServerConn]struct{}
-	connWg     sync.WaitGroup
-	doneChan   chan struct{}
+	listenerWg   sync.WaitGroup
+	mu           sync.RWMutex
+	listeners    map[net.Listener]struct{}
+	pendingConns map[*serverConn]struct{}
+	conns        map[*gossh.ServerConn]struct{}
+	connWg       sync.WaitGroup
+	doneChan     chan struct{}
 }
 
 func (srv *Server) ensureHostSigner() error {
@@ -196,6 +197,10 @@ func (srv *Server) Close() error {
 
 	srv.closeDoneChanLocked()
 	err := srv.closeListenersLocked()
+	for c := range srv.pendingConns {
+		c.Close()
+		delete(srv.pendingConns, c)
+	}
 	for c := range srv.conns {
 		c.Close()
 		delete(srv.conns, c)
@@ -269,25 +274,44 @@ func (srv *Server) Serve(l net.Listener) error {
 			}
 			return e
 		}
-		go srv.HandleConn(conn)
+		ctx, srvConn := srv.newConn(conn)
+		if srvConn != nil {
+			go srv.handleConn(ctx, srvConn)
+		}
 	}
 }
 
 func (srv *Server) HandleConn(newConn net.Conn) {
+	ctx, conn := srv.newConn(newConn)
+	if conn != nil {
+		srv.handleConn(ctx, conn)
+	}
+}
+
+func (srv *Server) newConn(newConn net.Conn) (Context, *serverConn) {
 	ctx, cancel := newContext(srv)
+	conn := &serverConn{Conn: newConn, closeCanceler: cancel}
+	if !srv.trackPendingConn(conn) {
+		conn.Close()
+		return nil, nil
+	}
+	return ctx, conn
+}
+
+func (srv *Server) handleConn(ctx Context, conn *serverConn) {
+	defer srv.untrackPendingConn(conn)
+	defer conn.Close()
 	if srv.ConnCallback != nil {
-		cbConn := srv.ConnCallback(ctx, newConn)
+		cbConn := srv.ConnCallback(ctx, conn.Conn)
 		if cbConn == nil {
-			newConn.Close()
 			return
 		}
-		newConn = cbConn
+		if !srv.wrapPendingConn(conn, cbConn) {
+			cbConn.Close()
+			return
+		}
 	}
-	conn := &serverConn{
-		Conn:          newConn,
-		idleTimeout:   srv.IdleTimeout,
-		closeCanceler: cancel,
-	}
+	conn.idleTimeout = srv.IdleTimeout
 	if srv.MaxTimeout > 0 {
 		conn.maxDeadline = time.Now().Add(srv.MaxTimeout)
 	}
@@ -295,7 +319,6 @@ func (srv *Server) HandleConn(newConn net.Conn) {
 		conn.handshakeDeadline = time.Now().Add(srv.HandshakeTimeout)
 	}
 	conn.updateDeadline()
-	defer conn.Close()
 	sshConn, chans, reqs, err := gossh.NewServerConn(conn, srv.config(ctx))
 	if err != nil {
 		if srv.ConnectionFailedCallback != nil {
@@ -305,8 +328,11 @@ func (srv *Server) HandleConn(newConn net.Conn) {
 	}
 	conn.handshakeDeadline = time.Time{}
 	conn.updateDeadline()
-	srv.trackConn(sshConn, true)
-	defer srv.trackConn(sshConn, false)
+	if !srv.trackConn(sshConn, conn) {
+		sshConn.Close()
+		return
+	}
+	defer srv.untrackConn(sshConn)
 
 	ctx.SetValue(ContextKeyConn, sshConn)
 	applyConnMetadata(ctx, sshConn)
@@ -451,18 +477,60 @@ func (srv *Server) trackListener(ln net.Listener, add bool) {
 	}
 }
 
-func (srv *Server) trackConn(c *gossh.ServerConn, add bool) {
+func (srv *Server) trackPendingConn(c *serverConn) bool {
 	srv.mu.Lock()
 	defer srv.mu.Unlock()
 
+	select {
+	case <-srv.doneChan:
+		return false
+	default:
+	}
+	if srv.pendingConns == nil {
+		srv.pendingConns = make(map[*serverConn]struct{})
+	}
+	srv.pendingConns[c] = struct{}{}
+	return true
+}
+
+func (srv *Server) wrapPendingConn(c *serverConn, wrapped net.Conn) bool {
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+
+	if _, ok := srv.pendingConns[c]; !ok {
+		return false
+	}
+	c.Conn = wrapped
+	return true
+}
+
+func (srv *Server) untrackPendingConn(c *serverConn) {
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+	delete(srv.pendingConns, c)
+}
+
+func (srv *Server) trackConn(c *gossh.ServerConn, pending *serverConn) bool {
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+
+	// Transfer the connection under the same lock used by Close, so it
+	// cannot miss a connection as its handshake completes.
+	if _, ok := srv.pendingConns[pending]; !ok {
+		return false
+	}
+	delete(srv.pendingConns, pending)
 	if srv.conns == nil {
 		srv.conns = make(map[*gossh.ServerConn]struct{})
 	}
-	if add {
-		srv.conns[c] = struct{}{}
-		srv.connWg.Add(1)
-	} else {
-		delete(srv.conns, c)
-		srv.connWg.Done()
-	}
+	srv.conns[c] = struct{}{}
+	srv.connWg.Add(1)
+	return true
+}
+
+func (srv *Server) untrackConn(c *gossh.ServerConn) {
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+	delete(srv.conns, c)
+	srv.connWg.Done()
 }
